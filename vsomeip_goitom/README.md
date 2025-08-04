@@ -1,5 +1,6 @@
 # Getting Started
 
+ To be deleted!
 1. Install VirtualBox
 2. Install two Ubuntu Machines on the VirtualBox
 3. Network the two Machines:Grok: Networking Linux VMs on VirtualBox
