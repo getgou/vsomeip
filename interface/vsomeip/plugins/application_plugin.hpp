@@ -6,8 +6,10 @@
 #ifndef VSOMEIP_V3_APPLICATION_PLUGIN_HPP_
 #define VSOMEIP_V3_APPLICATION_PLUGIN_HPP_
 
+#include <cstdint>
 #include <string>
 #include <memory>
+#include <cstdint>
 
 #include <vsomeip/export.hpp>
 

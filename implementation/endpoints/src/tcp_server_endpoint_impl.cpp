@@ -63,7 +63,7 @@ void tcp_server_endpoint_impl::init(const endpoint_type& _local,
     if (_error)
         return;
 
-    acceptor_.listen(boost::asio::socket_base::max_connections, _error);
+    acceptor_.listen(boost::asio::socket_base::max_listen_connections, _error);
     if (_error)
         return;
 
@@ -182,7 +182,7 @@ bool tcp_server_endpoint_impl::send_queued(const target_data_iterator_type _it) 
                                 << its_service;
                         auto handler = found_cbk->second;
                         auto ptr = this->shared_from_this();
-                        io_.post([ptr, handler]() { handler(ptr); });
+                        boost::asio::post(io_, [ptr, handler]() { handler(ptr); });
                         prepare_stop_handlers_.erase(found_cbk);
                     }
                 }
@@ -260,14 +260,28 @@ void tcp_server_endpoint_impl::accept_cbk(connection::ptr _connection,
                 VSOMEIP_WARNING << "tsei::" << __func__
                                 << ": couldn't enable keep_alive: " << its_error.message();
             }
-            // Setting the TIME_WAIT to 0 seconds forces RST to always be sent in reponse to a FIN
-            // The linger is needed to be set for suspend to RAM, since after resuming the
-            // connection could be lost and the socket could get stuck in TIME_WAIT for 120 seconds
-            new_connection_socket.set_option(boost::asio::socket_base::linger(true, 5), its_error);
+
+            // force always TCP RST on close/shutdown, in order to:
+            // 1) avoid issues with TIME_WAIT, which otherwise lasts for 120 secs with a
+            // non-responding endpoint (see also 4396812d2)
+            // 2) handle by default what needs to happen at suspend/shutdown
+            new_connection_socket.set_option(boost::asio::socket_base::linger(true, 0), its_error);
             if (its_error) {
                 VSOMEIP_WARNING << "tsei::" << __func__
                                 << ": setting SO_LINGER failed: " << its_error.message();
             }
+
+#if defined(__linux__) || defined(ANDROID)
+            // set a user timeout
+            // along the keep alives, this ensures connection closes if endpoint is unreachable
+            unsigned int opt = VSOMEIP_TCP_USER_TIMEOUT;
+            if (setsockopt(new_connection_socket.native_handle(), IPPROTO_TCP, TCP_USER_TIMEOUT,
+                           &opt, sizeof(opt))
+                == -1) {
+                VSOMEIP_WARNING << "tsei::" << __func__
+                                << ": could not setsockopt(TCP_USER_TIMEOUT), errno " << errno;
+            }
+#endif
         }
         if (!its_error) {
             {
@@ -314,6 +328,10 @@ bool tcp_server_endpoint_impl::is_suspended() const {
         return routing_state_e::RS_SUSPENDED == its_routing_host->get_routing_state();
     }
     return false;
+}
+
+void tcp_server_endpoint_impl::disconnect_from(const client_t) {
+    return;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -423,17 +441,6 @@ void tcp_server_endpoint_impl::connection::stop() {
 
     if (socket_.is_open()) {
         boost::system::error_code its_error;
-
-        auto its_server {server_.lock()};
-
-        if (its_server && its_server->is_suspended()) {
-            socket_.set_option(boost::asio::socket_base::linger(true, 0), its_error);
-            if (its_error) {
-                VSOMEIP_WARNING << "tcp_server_endpoint_impl::connection::stop<"
-                                << get_address_port_remote() << ">:setting SO_LINGER failed ("
-                                << its_error.message() << ")";
-            }
-        }
 
         socket_.shutdown(socket_.shutdown_both, its_error);
         if (its_error) {
@@ -784,7 +791,7 @@ void tcp_server_endpoint_impl::connection::receive_cbk(boost::system::error_code
     if (_error == boost::asio::error::eof || _error == boost::asio::error::connection_reset
         || _error == boost::asio::error::timed_out) {
         if (_error == boost::asio::error::timed_out) {
-            std::lock_guard<std::mutex> its_lock(socket_mutex_);
+            std::scoped_lock its_lock {socket_mutex_};
             VSOMEIP_WARNING << "tcp_server_endpoint receive_cbk: " << _error.message()
                             << " local: " << get_address_port_local()
                             << " remote: " << get_address_port_remote();
@@ -814,8 +821,7 @@ void tcp_server_endpoint_impl::connection::set_remote_info(const endpoint_type& 
 std::string tcp_server_endpoint_impl::connection::get_address_port_remote() const {
     std::string its_address_port;
     its_address_port.reserve(21);
-    boost::system::error_code ec;
-    its_address_port += remote_address_.to_string(ec);
+    its_address_port += remote_address_.to_string();
     its_address_port += ":";
     its_address_port += std::to_string(remote_port_);
     return its_address_port;
@@ -828,7 +834,7 @@ std::string tcp_server_endpoint_impl::connection::get_address_port_local() const
     if (socket_.is_open()) {
         endpoint_type its_local_endpoint = socket_.local_endpoint(ec);
         if (!ec) {
-            its_address_port += its_local_endpoint.address().to_string(ec);
+            its_address_port += its_local_endpoint.address().to_string();
             its_address_port += ":";
             its_address_port += std::to_string(its_local_endpoint.port());
         }
@@ -972,18 +978,15 @@ void tcp_server_endpoint_impl::print_status() {
 
 std::string
 tcp_server_endpoint_impl::get_remote_information(const target_data_iterator_type _it) const {
-    boost::system::error_code ec;
-    return _it->first.address().to_string(ec) + ":" + std::to_string(_it->first.port());
+    return _it->first.address().to_string() + ":" + std::to_string(_it->first.port());
 }
 
 std::string tcp_server_endpoint_impl::get_remote_information(const endpoint_type& _remote) const {
-    boost::system::error_code ec;
-    return _remote.address().to_string(ec) + ":" + std::to_string(_remote.port());
+    return _remote.address().to_string() + ":" + std::to_string(_remote.port());
 }
 
 void tcp_server_endpoint_impl::connection::wait_until_sent(
         const boost::system::error_code& _error) {
-
     std::shared_ptr<tcp_server_endpoint_impl> its_server(server_.lock());
     if (!its_server)
         return;
@@ -995,8 +998,7 @@ void tcp_server_endpoint_impl::connection::wait_until_sent(
         auto& its_data = it->second;
         if (its_data.is_sending_ && _error) {
             std::chrono::milliseconds its_timeout(VSOMEIP_MAX_TCP_SENT_WAIT_TIME);
-            boost::system::error_code ec;
-            its_data.sent_timer_.expires_from_now(its_timeout, ec);
+            its_data.sent_timer_.expires_after(its_timeout);
             its_data.sent_timer_.async_wait(
                     std::bind(&tcp_server_endpoint_impl::connection::wait_until_sent,
                               std::dynamic_pointer_cast<tcp_server_endpoint_impl::connection>(
@@ -1004,8 +1006,11 @@ void tcp_server_endpoint_impl::connection::wait_until_sent(
                               std::placeholders::_1));
             return;
         } else {
+            std::scoped_lock its_lock_inner {socket_mutex_};
             VSOMEIP_WARNING << __func__
-                            << ": Maximum wait time for send operation exceeded for tse.";
+                            << ": Maximum wait time for send operation exceeded for tse."
+                            << " local: " << get_address_port_local()
+                            << " remote: " << get_address_port_remote();
         }
     }
     {

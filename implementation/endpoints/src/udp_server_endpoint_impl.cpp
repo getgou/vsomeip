@@ -328,15 +328,26 @@ void udp_server_endpoint_impl::receive() {
 }
 
 void udp_server_endpoint_impl::receive_unicast() {
-
     std::lock_guard<std::mutex> its_lock(unicast_mutex_);
-
-    if (!is_stopped_ && unicast_socket_->is_open()) {
+    if (!is_stopped_ && unicast_socket_ && unicast_socket_->is_open()) {
         unicast_socket_->async_receive_from(
                 boost::asio::buffer(&unicast_recv_buffer_[0], max_message_size_), unicast_remote_,
                 std::bind(&udp_server_endpoint_impl::on_unicast_received,
                           std::dynamic_pointer_cast<udp_server_endpoint_impl>(shared_from_this()),
                           std::placeholders::_1, std::placeholders::_2));
+    } else {
+        if (is_stopped_ && unicast_socket_) {
+            boost::asio::post(io_,
+                              std::bind(&udp_server_endpoint_impl::shutdown_and_close,
+                                        std::dynamic_pointer_cast<udp_server_endpoint_impl>(
+                                                shared_from_this()),
+                                        true));
+        } else {
+            VSOMEIP_WARNING << "usei::" << __func__
+                            << ": Endpoint is running, but the unicast socket is not existing/"
+                               "closed. (0x"
+                            << std::hex << this << ")";
+        }
     }
 }
 
@@ -344,7 +355,6 @@ void udp_server_endpoint_impl::receive_unicast() {
 // receive_multicast is called with multicast_mutex_ being hold
 //
 void udp_server_endpoint_impl::receive_multicast(uint8_t _multicast_id) {
-
     if (!is_stopped_ && _multicast_id == multicast_id_ && multicast_socket_
         && multicast_socket_->is_open()) {
         auto its_storage = std::make_shared<udp_endpoint_receive_op::storage>(
@@ -357,6 +367,17 @@ void udp_server_endpoint_impl::receive_multicast(uint8_t _multicast_id) {
                 boost::asio::ip::address(), std::numeric_limits<std::size_t>::min());
         multicast_socket_->async_wait(socket_type::wait_read,
                                       udp_endpoint_receive_op::receive_cb(its_storage));
+    } else {
+        VSOMEIP_WARNING << "usei::" << __func__ << ": is_stopped_: " << is_stopped_ << std::dec
+                        << " _multicast_id: " << static_cast<int>(_multicast_id)
+                        << " multicast_id_: " << static_cast<int>(multicast_id_);
+        if (is_stopped_ && multicast_socket_) {
+            boost::asio::post(io_,
+                              std::bind(&udp_server_endpoint_impl::shutdown_and_close,
+                                        std::dynamic_pointer_cast<udp_server_endpoint_impl>(
+                                                shared_from_this()),
+                                        false));
+        }
     }
 }
 
@@ -522,6 +543,10 @@ void udp_server_endpoint_impl::leave(const std::string& _address) {
     leave_unlocked(_address);
 }
 
+void udp_server_endpoint_impl::disconnect_from(const client_t) {
+    return;
+}
+
 void udp_server_endpoint_impl::leave_unlocked(const std::string& _address) {
 
     try {
@@ -548,7 +573,7 @@ void udp_server_endpoint_impl::leave_unlocked(const std::string& _address) {
 void udp_server_endpoint_impl::add_default_target(service_t _service, const std::string& _address,
                                                   uint16_t _port) {
     std::lock_guard<std::mutex> its_lock(default_targets_mutex_);
-    endpoint_type its_endpoint(boost::asio::ip::address::from_string(_address), _port);
+    endpoint_type its_endpoint(boost::asio::ip::make_address(_address), _port);
     default_targets_[_service] = its_endpoint;
 }
 
@@ -834,8 +859,7 @@ void udp_server_endpoint_impl::print_status() {
         its_queue_size = c.second.queue_.size();
         its_data_size = c.second.queue_size_;
 
-        boost::system::error_code ec;
-        VSOMEIP_INFO << "status use: client: " << c.first.address().to_string(ec) << ":" << std::dec
+        VSOMEIP_INFO << "status use: client: " << c.first.address().to_string() << ":" << std::dec
                      << c.first.port() << " queue: " << std::dec << its_queue_size
                      << " data: " << std::dec << its_data_size;
     }
@@ -843,15 +867,11 @@ void udp_server_endpoint_impl::print_status() {
 
 std::string
 udp_server_endpoint_impl::get_remote_information(const target_data_iterator_type _it) const {
-
-    boost::system::error_code ec;
-    return _it->first.address().to_string(ec) + ":" + std::to_string(_it->first.port());
+    return _it->first.address().to_string() + ":" + std::to_string(_it->first.port());
 }
 
 std::string udp_server_endpoint_impl::get_remote_information(const endpoint_type& _remote) const {
-
-    boost::system::error_code ec;
-    return _remote.address().to_string(ec) + ":" + std::to_string(_remote.port());
+    return _remote.address().to_string() + ":" + std::to_string(_remote.port());
 }
 
 bool udp_server_endpoint_impl::is_reliable() const {
@@ -867,7 +887,7 @@ std::string udp_server_endpoint_impl::get_address_port_local() const {
     if (unicast_socket_->is_open()) {
         endpoint_type its_local_endpoint = unicast_socket_->local_endpoint(ec);
         if (!ec) {
-            its_address_port += its_local_endpoint.address().to_string(ec);
+            its_address_port += its_local_endpoint.address().to_string();
             its_address_port += ":";
             its_address_port += std::to_string(its_local_endpoint.port());
         }
@@ -1029,7 +1049,7 @@ void udp_server_endpoint_impl::set_multicast_option(const boost::asio::ip::addre
 
             if (0 == joined_.size()) {
                 multicast_socket_->cancel(_error);
-
+                multicast_id_ = 0;
                 multicast_socket_.reset();
                 multicast_local_.reset(nullptr);
             }

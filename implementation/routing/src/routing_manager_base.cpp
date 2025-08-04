@@ -58,10 +58,8 @@ void routing_manager_base::debounce_timeout_update_cbk(
         if (!_event) {
             std::lock_guard<std::mutex> its_lock(debounce_mutex_);
             if (debounce_clients_.size() > 0) {
-                debounce_timer.expires_from_now(
-                        std::chrono::duration_cast<std::chrono::milliseconds>(
-                                debounce_clients_.begin()->first
-                                - std::chrono::steady_clock::now()));
+                debounce_timer.expires_after(std::chrono::duration_cast<std::chrono::milliseconds>(
+                        debounce_clients_.begin()->first - std::chrono::steady_clock::now()));
                 debounce_timer.async_wait(std::get<2>(debounce_clients_.begin()->second));
             }
             return;
@@ -111,10 +109,8 @@ void routing_manager_base::debounce_timeout_update_cbk(
             }
 
             if (debounce_clients_.size() > 0) {
-                debounce_timer.expires_from_now(
-                        std::chrono::duration_cast<std::chrono::milliseconds>(
-                                debounce_clients_.begin()->first
-                                - std::chrono::steady_clock::now()));
+                debounce_timer.expires_after(std::chrono::duration_cast<std::chrono::milliseconds>(
+                        debounce_clients_.begin()->first - std::chrono::steady_clock::now()));
                 debounce_timer.async_wait(std::get<2>(debounce_clients_.begin()->second));
             }
         } // its_lock(debounce_mutex_)
@@ -138,7 +134,7 @@ void routing_manager_base::register_debounce(const std::shared_ptr<debounce_filt
 
         if (elem == debounce_clients_.begin()) {
             debounce_timer.cancel();
-            debounce_timer.expires_from_now(sec);
+            debounce_timer.expires_after(sec);
             debounce_timer.async_wait(std::get<2>(elem->second));
         }
     }
@@ -773,7 +769,11 @@ void routing_manager_base::add_known_client(client_t _client, const std::string 
     }
 #endif
     std::lock_guard<std::mutex> its_lock(known_clients_mutex_);
-    known_clients_[_client] = _client_host;
+    if (known_clients_.find(_client) == known_clients_.end()) {
+        known_clients_[_client] = _client_host;
+    } else if (!_client_host.empty()) {
+        known_clients_[_client] = _client_host;
+    }
 }
 
 void routing_manager_base::remove_known_client(client_t _client) {
@@ -791,12 +791,10 @@ void routing_manager_base::subscribe(client_t _client,
     (void)_sec_client;
 
     std::set<event_t> its_already_subscribed_events;
-    bool inserted = insert_subscription(_service, _instance, _eventgroup,
-            _event, _filter, _client, &its_already_subscribed_events);
-    if (inserted) {
-        notify_one_current_value(_client, _service, _instance, _eventgroup,
-                _event, its_already_subscribed_events);
-    }
+    insert_subscription(_service, _instance, _eventgroup, _event, _filter, _client,
+                        &its_already_subscribed_events);
+    notify_one_current_value(_client, _service, _instance, _eventgroup, _event,
+                             its_already_subscribed_events);
 }
 
 void routing_manager_base::unsubscribe(client_t _client,
@@ -1188,20 +1186,13 @@ void routing_manager_base::remove_local(client_t _client,
     if (_remove_sec_client) {
         configuration_->get_policy_manager()->remove_client_to_sec_client_mapping(_client);
     }
-
-    auto self {shared_from_this()};
     for (auto its_subscription : _subscribed_eventgroups) {
-        auto its_service = std::get<0>(its_subscription);
-        auto its_instance = std::get<1>(its_subscription);
-        auto its_eventgroup = std::get<2>(its_subscription);
-        host_->on_subscription(its_service, its_instance, its_eventgroup, _client, &its_sec_client,
-                               get_env(_client), false,
-                               [self, this, _client, its_sec_client, its_service, its_instance,
-                                its_eventgroup](const bool _subscription_accepted) {
-                                   (void)_subscription_accepted;
-                                   unsubscribe(_client, &its_sec_client, its_service, its_instance,
-                                               its_eventgroup, ANY_EVENT);
-                               });
+        host_->on_subscription(std::get<0>(its_subscription), std::get<1>(its_subscription),
+                std::get<2>(its_subscription), _client,
+                &its_sec_client, get_env(_client),
+                false, [](const bool _subscription_accepted){ (void)_subscription_accepted; });
+        routing_manager_base::unsubscribe(_client, &its_sec_client, std::get<0>(its_subscription),
+                std::get<1>(its_subscription), std::get<2>(its_subscription), ANY_EVENT);
     }
     ep_mgr_->remove_local(_client);
     remove_known_client(_client);
@@ -1304,8 +1295,7 @@ std::shared_ptr<eventgroupinfo> routing_manager_base::find_eventgroup(
                         its_multicast_address, its_multicast_port)) {
                     try {
                         its_info->set_multicast(
-                                boost::asio::ip::address::from_string(
-                                        its_multicast_address),
+                                boost::asio::ip::make_address(its_multicast_address),
                                 its_multicast_port);
                     }
                     catch (...) {
@@ -1635,14 +1625,12 @@ routing_manager_base::get_guest(client_t _client,
 void
 routing_manager_base::add_guest(client_t _client,
         const boost::asio::ip::address &_address, port_t _port) {
-
     std::lock_guard<std::mutex> its_lock(guests_mutex_);
     guests_[_client] = std::make_pair(_address, _port);
 }
 
 void
 routing_manager_base::remove_guest(client_t _client) {
-
     std::lock_guard<std::mutex> its_lock(guests_mutex_);
     guests_.erase(_client);
 }

@@ -37,7 +37,7 @@ targets_add_default_dependencies("${executable_targets}")
 targets_link_default_libraries("${executable_targets}")
 
 # Skip valgrind
-if (DEFINED VALGRIND_TYPE AND NOT VALGRIND_TYPE STREQUAL "" AND TEST_SKIP_VALGRIND_TRACKING)
+if (DEFINED VALGRIND_TYPE AND NOT VALGRIND_TYPE STREQUAL "")
     set(TEST_ENTRYPOINT ${TEST_ENTRYPOINT} --trace-children-skip=*/application_test*,*/routingmanagerd)
 endif()
 
@@ -69,12 +69,6 @@ if (NOT ${TESTS_BAT})
     add_executable(application_test_single_process
         application_test_single_process.cpp
     )
-
-    if(QNX)
-        target_compile_definitions(application_test_single_process
-            PRIVATE _QNX_SOURCE
-        )
-    endif()
 
     # Add the test executable.
     add_executable(application_test_availability
