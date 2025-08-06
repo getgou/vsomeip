@@ -28,6 +28,8 @@ tcp_server_endpoint_impl::tcp_server_endpoint_impl(
         const std::shared_ptr<configuration>& _configuration) :
     tcp_server_endpoint_base_impl(_endpoint_host, _routing_host, _io, _configuration),
     acceptor_(_io), buffer_shrink_threshold_(configuration_->get_buffer_shrink_threshold()),
+    has_cross_vlan_multicast_(_configuration->has_cross_vlan_multicast()),
+    multicast_ttl_(_configuration->get_cross_vlan_multicast_ttl()),
     // send timeout after 2/3 of configured ttl, warning after 1/3
     send_timeout_(configuration_->get_sd_ttl() * 666) {
     is_supporting_magic_cookies_ = true;
@@ -46,6 +48,37 @@ void tcp_server_endpoint_impl::init(const endpoint_type& _local,
     acceptor_.set_option(boost::asio::socket_base::reuse_address(true), _error);
     if (_error)
         return;
+
+/* VSOMEIP_INFO << __func__ << ": multicast_ttl_:" << multicast_ttl_;
+
+#ifdef _WIN32
+    VSOMEIP_INFO << __func__ << ": _WIN32 is defined!";
+#else
+    VSOMEIP_INFO << __func__ << ": _WIN32 is NOT defined!";
+#endif */
+
+#ifndef _WIN32
+         //VSOMEIP_INFO << __func__ << ": is_v4_ = " << is_v4_;
+         //VSOMEIP_INFO << __func__ << ": _local.address().is_v4()= " <<_local.address().is_v4();
+        if(has_cross_vlan_multicast_) {
+            VSOMEIP_INFO << __func__ << ": Attempting to set IP_MULTICAST_TTL...";
+            //int ttl_value = 64;
+            u_char loop = 1;
+            int fd = acceptor_.native_handle();
+
+            if (setsockopt(fd, IPPROTO_IP, IP_MULTICAST_TTL, &multicast_ttl_, sizeof(multicast_ttl_)) < 0) {
+                VSOMEIP_WARNING << __func__ << ": unable to set IP_MULTICAST_TTL (errno=" << errno << ")";
+            } else {
+                VSOMEIP_INFO << __func__ << ": IP_MULTICAST_TTL set to 64";
+            }
+
+            if (setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, sizeof(loop)) < 0) {
+                VSOMEIP_WARNING << __func__ << ": unable to set IP_MULTICAST_LOOP (errno=" << errno << ")";
+            } else {
+                VSOMEIP_INFO << __func__ << ": IP_MULTICAST_LOOP enabled";
+            }
+        }
+#endif
 
 #if defined(__linux__) || defined(ANDROID) || defined(__QNX__)
     // If specified, bind to device
