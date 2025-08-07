@@ -1,6 +1,6 @@
 {
-    "unicast" : "127.0.0.1",
-    "netmask" : "255.0.0.0",
+    "unicast" : "192.168.10.4",
+    "netmask" : "255.255.255.0",
     "logging" :
     {
         "level" : "info",
@@ -32,7 +32,7 @@
         {
             "service" : "0x1234",
             "instance" : "0x5678",
-            "unicast" : "192.168.56.102",
+            "unicast" : "192.168.10.5",
             "reliable" : { "port" : "30509", "magic-cookies" : false },
             "events" :
             [
@@ -71,7 +71,7 @@
     {
         "enable" : "true",
         "multicast" : "224.0.0.1",
-        "port" : "30491",
+        "port" : "30490",
         "protocol" : "udp",
         "initial_delay_min" : "10",
         "initial_delay_max" : "100",

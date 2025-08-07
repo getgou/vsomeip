@@ -19,7 +19,7 @@
 class client_sample {
 public:
     client_sample(bool _use_tcp, bool _be_quiet, uint32_t _cycle)
-        : app_(vsomeip::runtime::get()->create_application("client-sample")),
+        : app_(vsomeip::runtime::get()->create_application("service-sample")),
           request_(vsomeip::runtime::get()->create_request(_use_tcp)),
           use_tcp_(_use_tcp),
           be_quiet_(_be_quiet),
