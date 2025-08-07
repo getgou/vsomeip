@@ -1,0 +1,108 @@
+2025-08-07 09:58:53.290170 client-sample [warning] Reliability type for event [1234.5678.0777] was not configured Using : RT_RELIABLE
+2025-08-07 09:58:53.290212 client-sample [warning] Reliability type for event [1234.5678.0778] was not configured Using : RT_RELIABLE
+2025-08-07 09:58:53.290215 client-sample [warning] Reliability type for event [1234.5678.0779] was not configured Using : RT_RELIABLE
+2025-08-07 09:58:53.290270 client-sample [info] Using configuration file: "../config/vsomeip-local-tcp-client.json".
+2025-08-07 09:58:53.290275 client-sample [info] Parsed vsomeip configuration in 0ms
+2025-08-07 09:58:53.290280 client-sample [info] Configuration module loaded.
+2025-08-07 09:58:53.290284 client-sample [info] Security disabled!
+2025-08-07 09:58:53.290286 client-sample [info] Initializing vsomeip (3.5.6) application "client-sample".
+2025-08-07 09:58:53.290289 client-sample [info] Instantiating routing manager [Proxy].
+2025-08-07 09:58:53.290326 client-sample [info] Client [1343] is connecting to [0] at /tmp/vsomeip-0 endpoint > 0x5ffc8bc149e0
+2025-08-07 09:58:53.290359 client-sample [info] Application(client-sample, 1343) is initialized (11, 100).
+Client settings [protocol=UDP:quiet=false:cycle=1000]
+2025-08-07 09:58:53.290387 client-sample [info] Starting vsomeip application "client-sample" (1343) using 2 threads I/O nice 0 boost event loop period 0
+2025-08-07 09:58:53.290653 client-sample [info] main dispatch thread id from application: 1343 (client-sample) is: 72b0b0bfe640 TID: 56442
+Service [1234.5678] is NOT available.
+Service [1235.5678] is NOT available.
+2025-08-07 09:58:53.290712 client-sample [info] shutdown thread id from application: 1343 (client-sample) is: 72b0b03fd640 TID: 56443
+2025-08-07 09:58:53.290814 client-sample [info] io thread id from application: 1343 (client-sample) is: 72b0b1f83b80 TID: 56440
+2025-08-07 09:58:53.290830 client-sample [info] io thread id from application: 1343 (client-sample) is: 72b0afbfc640 TID: 56444
+2025-08-07 09:58:53.290859 client-sample [info] cei::wait_connecting_cbk: endpoint > 0x5ffc8bc149e0 socket state > 1
+2025-08-07 09:58:53.290865 client-sample [info] assign_client: (1343:client-sample)
+2025-08-07 09:58:53.292450 client-sample [info] create_local_server: Listening @ /tmp/vsomeip-1343
+2025-08-07 09:58:53.292468 client-sample [info] Client 1343 (client-sample) successfully connected to routing  ~> registering..
+2025-08-07 09:58:53.292473 client-sample [info] Client 1343 Registering to routing manager @ vsomeip-0
+2025-08-07 09:58:53.305838 client-sample [info] Application/Client 1343 (client-sample) is registered.
+2025-08-07 09:58:53.335273 client-sample [info] ON_AVAILABLE(1343): [1234.5678:0.0]
+Service [1234.5678] is available.
+2025-08-07 09:58:53.339933 client-sample [info] emb::find_or_create_local: create_client 1277
+2025-08-07 09:58:53.339975 client-sample [info] Client [1343] is connecting to [1277] at /tmp/vsomeip-1277 endpoint > 0x72b098001050
+Client/Session [1343/0001] sent a request to Service [1234.5678]
+2025-08-07 09:58:53.342380 client-sample [info] cei::wait_connecting_cbk: endpoint > 0x72b098001050 socket state > 1
+Received a response from Service [1234.5678] to Client/Session [1343/0001]
+Client/Session [1343/0002] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1343/0002]
+Client/Session [1343/0003] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1343/0003]
+Client/Session [1343/0004] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1343/0004]
+Client/Session [1343/0005] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1343/0005]
+Client/Session [1343/0006] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1343/0006]
+Client/Session [1343/0007] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1343/0007]
+Client/Session [1343/0008] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1343/0008]
+Client/Session [1343/0009] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1343/0009]
+2025-08-07 09:59:01.538077 client-sample [info] ON_UNAVAILABLE(1343): [1234.5678:0.0]
+Service [1234.5678] is NOT available.
+2025-08-07 09:59:11.625874 client-sample [info] ON_AVAILABLE(1343): [1234.5678:0.0]
+Service [1234.5678] is available.
+Client/Session [1343/000a] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1343/000a]
+Client/Session [1343/000b] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1343/000b]
+Client/Session [1343/000c] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1343/000c]
+Client/Session [1343/000d] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1343/000d]
+Client/Session [1343/000e] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1343/000e]
+Client/Session [1343/000f] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1343/000f]
+Client/Session [1343/0010] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1343/0010]
+Client/Session [1343/0011] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1343/0011]
+Client/Session [1343/0012] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1343/0012]
+2025-08-07 09:59:20.585096 client-sample [info] ON_UNAVAILABLE(1343): [1234.5678:0.0]
+Service [1234.5678] is NOT available.
+2025-08-07 09:59:20.645804 client-sample [info] local_uds_client_endpoint_impl::receive_cbk Error: End of file
+2025-08-07 09:59:20.645827 client-sample [info] rmc::handle_client_error: Client 0x1343 handles a client error 0x0000 with host, will reconnect
+2025-08-07 09:59:20.645856 client-sample [info] emb::remove_local: client 1277
+2025-08-07 09:59:20.645865 client-sample [info] cei::shutdown_and_close_socket_unlocked: not recreating socket  endpoint > 0x72b098001050 socket state > 0
+2025-08-07 09:59:20.645869 client-sample [info] Client [1343] is closing connection to [1277] endpoint > 0x72b098001050
+2025-08-07 09:59:20.645874 client-sample [info] Application/Client 1343: Reconnecting to routing manager.
+2025-08-07 09:59:20.645897 client-sample [warning] cei::shutdown_and_close_socket_unlocked: socket has been reset  endpoint > 0x5ffc8bc149e0 socket state > 0
+2025-08-07 09:59:20.645905 client-sample [info] local_uds_client_endpoint_impl::receive_cbk Error: Operation canceled
+2025-08-07 09:59:20.746891 client-sample [warning] local_client_endpoint::connect: Couldn't connect to: /tmp/vsomeip-0 (No such file or directory / 2)
+2025-08-07 09:59:20.746964 client-sample [info] cei::wait_connecting_cbk: endpoint > 0x5ffc8bc149e0 socket state > 1
+2025-08-07 09:59:20.746973 client-sample [warning] cei::connect_cbk: restarting socket due to No such file or directory (2): endpoint > 0x5ffc8bc149e0 socket state > 1
+2025-08-07 09:59:20.746986 client-sample [warning] cei::shutdown_and_close_socket_unlocked: socket has been reset  endpoint > 0x5ffc8bc149e0 socket state > 0
+2025-08-07 09:59:20.746990 client-sample [warning] on_disconnect: Resetting state to ST_DEREGISTERED
+2025-08-07 09:59:20.868086 client-sample [warning] local_client_endpoint::connect: Couldn't connect to: /tmp/vsomeip-0 (No such file or directory / 2)
+2025-08-07 09:59:20.868190 client-sample [info] cei::wait_connecting_cbk: endpoint > 0x5ffc8bc149e0 socket state > 1
+2025-08-07 09:59:20.868200 client-sample [warning] cei::connect_cbk: restarting socket due to No such file or directory (2): endpoint > 0x5ffc8bc149e0 socket state > 1
+2025-08-07 09:59:20.868213 client-sample [warning] cei::shutdown_and_close_socket_unlocked: socket has been reset  endpoint > 0x5ffc8bc149e0 socket state > 0
+2025-08-07 09:59:20.868218 client-sample [warning] on_disconnect: Resetting state to ST_DEREGISTERED
+2025-08-07 09:59:21.068865 client-sample [warning] local_client_endpoint::connect: Couldn't connect to: /tmp/vsomeip-0 (No such file or directory / 2)
+2025-08-07 09:59:21.068901 client-sample [info] cei::wait_connecting_cbk: endpoint > 0x5ffc8bc149e0 socket state > 1
+2025-08-07 09:59:21.068906 client-sample [warning] cei::connect_cbk: restarting socket due to No such file or directory (2): endpoint > 0x5ffc8bc149e0 socket state > 1
+2025-08-07 09:59:21.068918 client-sample [warning] cei::shutdown_and_close_socket_unlocked: socket has been reset  endpoint > 0x5ffc8bc149e0 socket state > 0
+2025-08-07 09:59:21.068923 client-sample [warning] on_disconnect: Resetting state to ST_DEREGISTERED
+2025-08-07 09:59:21.469330 client-sample [warning] local_client_endpoint::connect: Couldn't connect to: /tmp/vsomeip-0 (No such file or directory / 2)
+2025-08-07 09:59:21.469366 client-sample [info] cei::wait_connecting_cbk: endpoint > 0x5ffc8bc149e0 socket state > 1
+2025-08-07 09:59:21.469371 client-sample [warning] cei::connect_cbk: restarting socket due to No such file or directory (2): endpoint > 0x5ffc8bc149e0 socket state > 1
+2025-08-07 09:59:21.469417 client-sample [warning] cei::shutdown_and_close_socket_unlocked: socket has been reset  endpoint > 0x5ffc8bc149e0 socket state > 0
+2025-08-07 09:59:21.469424 client-sample [warning] on_disconnect: Resetting state to ST_DEREGISTERED
+2025-08-07 09:59:22.275886 client-sample [warning] local_client_endpoint::connect: Couldn't connect to: /tmp/vsomeip-0 (No such file or directory / 2)
+2025-08-07 09:59:22.275928 client-sample [info] cei::wait_connecting_cbk: endpoint > 0x5ffc8bc149e0 socket state > 1
+2025-08-07 09:59:22.275932 client-sample [warning] cei::connect_cbk: restarting socket due to No such file or directory (2): endpoint > 0x5ffc8bc149e0 socket state > 1
+2025-08-07 09:59:22.275946 client-sample [warning] cei::shutdown_and_close_socket_unlocked: socket has been reset  endpoint > 0x5ffc8bc149e0 socket state > 0
+2025-08-07 09:59:22.275950 client-sample [warning] on_disconnect: Resetting state to ST_DEREGISTERED
+^C2025-08-07 09:59:23.415804 client-sample [info] Stopping vsomeip application "client-sample" (1343).
+2025-08-07 09:59:23.416275 client-sample [warning] cei::shutdown_and_close_socket_unlocked: socket was not open  endpoint > 0x5ffc8bc149e0 socket state > 0
+2025-08-07 09:59:23.416307 client-sample [info] cei::shutdown_and_close_socket_unlocked: not recreating socket  endpoint > 0x5ffc8bc149e0 socket state > 0
