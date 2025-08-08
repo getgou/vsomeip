@@ -24,6 +24,7 @@
 #include <vsomeip/plugins/pre_configuration_plugin.hpp>
 #include <vsomeip/internal/logger.hpp>
 
+#include "internal.hpp"
 #include "../include/application_impl.hpp"
 #ifdef VSOMEIP_ENABLE_MULTIPLE_ROUTING_MANAGERS
 #include "../../configuration/include/configuration_impl.hpp"
@@ -49,7 +50,8 @@ configuration::~configuration() {}
 uint32_t application_impl::app_counter__ = 0;
 std::mutex application_impl::app_counter_mutex__;
 
-application_impl::application_impl(const std::string &_name, const std::string &_path) :
+
+application_impl::application_impl(const std::string& _name, const std::string& _path) :
     runtime_ {runtime::get()}, client_ {VSOMEIP_CLIENT_UNSET}, session_ {0},
     is_initialized_ {false}, name_ {_name}, path_ {_path},
     work_ {std::make_shared<
@@ -63,8 +65,10 @@ application_impl::application_impl(const std::string &_name, const std::string &
     is_dispatching_ {false}, max_dispatchers_ {VSOMEIP_DEFAULT_MAX_DISPATCHERS},
     max_dispatch_time_ {VSOMEIP_DEFAULT_MAX_DISPATCH_TIME}, dispatcher_counter_ {0},
     max_detached_thread_wait_time {VSOMEIP_MAX_WAIT_TIME_DETACHED_THREADS}, stopped_ {false},
-    block_stopping_ {false}, is_routing_manager_host_ {false}, stopped_called_ {false},
-    watchdog_timer_ {io_}, client_side_logging_ {false}, has_session_handling_ {true} { }
+    block_stop_condition_ {false}, is_routing_manager_host_ {false}, stopped_called_ {false},
+    watchdog_timer_ {io_}, client_side_logging_ {false}, has_session_handling_ {true} {
+}
+
 
 application_impl::~application_impl() {
     runtime_->remove_application(name_);
@@ -165,6 +169,7 @@ bool application_impl::init() {
             configuration_->set_configuration_path(configuration_path);
         }
         configuration_->load(name_);
+        VSOMEIP_INFO << "Configuration loaded with Multiple Routing Managers ENABLED.";
 #endif // VSOMEIP_ENABLE_MULTIPLE_ROUTING_MANAGERS
     }
 
@@ -398,7 +403,7 @@ void application_impl::start() {
     {
         std::lock_guard<std::mutex> its_lock(start_stop_mutex_);
         if (io_.stopped()) {
-            io_.reset();
+            io_.restart();
         } else if(stop_thread_.joinable()) {
             VSOMEIP_ERROR << "Trying to start an already started application.";
             return;
@@ -406,7 +411,7 @@ void application_impl::start() {
         if (stopped_) {
             {
                 std::lock_guard<std::mutex> its_lock_start_stop(block_stop_mutex_);
-                block_stopping_ = true;
+                block_stop_condition_ = true;
                 block_stop_cv_.notify_all();
             }
 
@@ -427,6 +432,7 @@ void application_impl::start() {
         {
             std::lock_guard<std::mutex> its_lock(dispatcher_mutex_);
             is_dispatching_ = true;
+            elapse_unactive_dispatchers_ = false;
             std::packaged_task<void()> dispatcher_task_(
                     std::bind(&application_impl::main_dispatch, shared_from_this()));
             std::future<void> dispatcher_future_ = dispatcher_task_.get_future();
@@ -528,7 +534,7 @@ void application_impl::start() {
     }
     {
         std::lock_guard<std::mutex> its_lock_start_stop(block_stop_mutex_);
-        block_stopping_ = true;
+        block_stop_condition_ = true;
         block_stop_cv_.notify_all();
     }
 
@@ -550,7 +556,7 @@ void application_impl::stop() {
     bool block = true;
     {
         std::lock_guard<std::mutex> its_lock_start_stop(start_stop_mutex_);
-        if (stopped_ || stopped_called_) {
+        if (stopped_called_) {
             return;
         }
         stop_caller_id_ = std::this_thread::get_id();
@@ -590,8 +596,8 @@ void application_impl::stop() {
     if (block) {
         std::unique_lock<std::mutex> block_stop_lock(block_stop_mutex_);
         block_stop_cv_.wait_for(block_stop_lock, std::chrono::milliseconds(1000),
-                                [this] { return block_stopping_.load(); });
-        block_stopping_ = false;
+                                [this] { return block_stop_condition_; });
+        block_stop_condition_ = false;
     }
 }
 
@@ -658,11 +664,9 @@ void application_impl::subscribe(service_t _service, instance_t _instance,
         if (check_subscription_state(_service, _instance, _eventgroup, _event)) {
             // Get configured, application-specific filter
             auto its_filter {
-                configuration_->get_debounce(get_client(), _service, _instance, _event)};
-
-            routing_->subscribe(client_, &sec_client_,
-                    _service, _instance, _eventgroup, _major,
-                    _event, its_filter);
+                configuration_->get_debounce(get_name(), _service, _instance, _event)};
+            routing_->subscribe(client_, &sec_client_, _service, _instance, _eventgroup, _major,
+                                _event, its_filter);
         }
     }
 }
@@ -1167,6 +1171,13 @@ void application_impl::register_subscription_handler(service_t _service,
 void application_impl::register_subscription_handler(service_t _service,
         instance_t _instance, eventgroup_t _eventgroup,
         const subscription_handler_sec_t &_handler) {
+
+        VSOMEIP_INFO << __func__ << ": ("
+        << std::hex << std::setfill('0')
+        << std::setw(4) << get_client() << "): ["
+        << std::setw(4) << _service << "."
+        << std::setw(4) << _instance << "."
+        << std::setw(4) << _eventgroup << "]";
 
     std::lock_guard<std::mutex> its_lock(subscription_mutex_);
     subscription_[_service][_instance][_eventgroup] = std::make_pair(_handler, nullptr);
@@ -1872,11 +1883,13 @@ void application_impl::main_dispatch() {
     while (is_dispatching_) {
         if (handlers_.empty() || !is_active_dispatcher(its_id)) {
             // Cancel other waiting dispatcher
+            elapse_unactive_dispatchers_ = true;
             dispatcher_condition_.notify_all();
             // Wait for new handlers to execute
-            while (is_dispatching_ && (handlers_.empty() || !is_active_dispatcher(its_id))) {
-                dispatcher_condition_.wait(its_lock);
-            }
+            dispatcher_condition_.wait(its_lock, [this, &its_id] {
+                return !is_dispatching_ || (!handlers_.empty() && is_active_dispatcher(its_id));
+            });
+            elapse_unactive_dispatchers_ = false;
         } else {
             std::shared_ptr<sync_handler> its_handler;
             while (is_dispatching_ && is_active_dispatcher(its_id)
@@ -1901,7 +1914,6 @@ void application_impl::main_dispatch() {
             }
         }
     }
-    its_lock.unlock();
 }
 
 void application_impl::dispatch() {
@@ -1924,16 +1936,19 @@ void application_impl::dispatch() {
     std::unique_lock<std::mutex> its_lock(handlers_mutex_);
     while (is_active_dispatcher(its_id)) {
         if (is_dispatching_ && handlers_.empty()) {
-             dispatcher_condition_.wait(its_lock);
-             // Maybe woken up from main dispatcher
-             if (handlers_.empty() && !is_active_dispatcher(its_id)) {
-                 if (!is_dispatching_) {
-                     return;
-                 }
-                 std::lock_guard<std::mutex> its_lock(dispatcher_mutex_);
-                 elapsed_dispatchers_.insert(its_id);
-                 return;
-             }
+            dispatcher_condition_.wait(its_lock, [this] {
+                return !is_dispatching_ || !handlers_.empty() || elapse_unactive_dispatchers_;
+            });
+
+            // Maybe woken up from main dispatcher
+            if (handlers_.empty() && !is_active_dispatcher(its_id)) {
+                if (!is_dispatching_) {
+                    return;
+                }
+                std::lock_guard<std::mutex> its_lock(dispatcher_mutex_);
+                elapsed_dispatchers_.insert(its_id);
+                return;
+            }
         } else {
             std::shared_ptr<sync_handler> its_handler;
             while (is_dispatching_ && is_active_dispatcher(its_id)
@@ -2040,7 +2055,7 @@ void application_impl::invoke_handler(std::shared_ptr<sync_handler> &_handler) {
             _handler->handler_type_);
 
     boost::asio::steady_timer its_dispatcher_timer(io_);
-    its_dispatcher_timer.expires_from_now(std::chrono::milliseconds(max_dispatch_time_));
+    its_dispatcher_timer.expires_after(std::chrono::milliseconds(max_dispatch_time_));
     its_dispatcher_timer.async_wait([this, its_sync_handler](const boost::system::error_code &_error) {
         if (!_error) {
             print_blocking_call(its_sync_handler);
@@ -2119,8 +2134,8 @@ void application_impl::invoke_handler(std::shared_ptr<sync_handler> &_handler) {
             print_blocking_call(its_sync_handler);
         }
     }
-    boost::system::error_code ec;
-    its_dispatcher_timer.cancel(ec);
+
+    its_dispatcher_timer.cancel();
 
     while (is_dispatching_ ) {
         if (dispatcher_mutex_.try_lock()) {
@@ -2232,9 +2247,7 @@ void application_impl::shutdown() {
 
     {
         std::unique_lock<std::mutex> its_lock(start_stop_mutex_);
-        while(!stopped_) {
-            stop_cv_.wait(its_lock);
-        }
+        stop_cv_.wait(its_lock, [this] { return stopped_called_; });
     }
     {
         std::lock_guard<std::mutex> its_handler_lock(handlers_mutex_);
@@ -2696,7 +2709,7 @@ void application_impl::watchdog_cbk(boost::system::error_code const &_error) {
             std::lock_guard<std::mutex> its_lock(watchdog_timer_mutex_);
             handler = watchdog_handler_;
             if (handler && std::chrono::seconds::zero() != watchdog_interval_) {
-                watchdog_timer_.expires_from_now(watchdog_interval_);
+                watchdog_timer_.expires_after(watchdog_interval_);
                 watchdog_timer_.async_wait(std::bind(&application_impl::watchdog_cbk,
                         this, std::placeholders::_1));
             }
@@ -2718,7 +2731,7 @@ void application_impl::set_watchdog_handler(const watchdog_handler_t &_handler,
         std::lock_guard<std::mutex> its_lock(watchdog_timer_mutex_);
         watchdog_handler_ = _handler;
         watchdog_interval_ = _interval;
-        watchdog_timer_.expires_from_now(_interval);
+        watchdog_timer_.expires_after(_interval);
         watchdog_timer_.async_wait(std::bind(&application_impl::watchdog_cbk,
                 this, std::placeholders::_1));
     } else {
@@ -2776,6 +2789,13 @@ void application_impl::register_async_subscription_handler(service_t _service,
 void application_impl::register_async_subscription_handler(service_t _service,
     instance_t _instance, eventgroup_t _eventgroup,
     async_subscription_handler_sec_t _handler) {
+
+    VSOMEIP_INFO << __func__ << ": ("
+    << std::hex << std::setfill('0')
+    << std::setw(4) << get_client() << "): ["
+    << std::setw(4) << _service << "."
+    << std::setw(4) << _instance << "."
+    << std::setw(4) << _eventgroup << "]";
 
     std::lock_guard<std::mutex> its_lock(subscription_mutex_);
     subscription_[_service][_instance][_eventgroup] = std::make_pair(nullptr, _handler);

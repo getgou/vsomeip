@@ -6,12 +6,20 @@
 #include <atomic>
 #include <iomanip>
 #include <sstream>
+#if defined(__linux__) || defined(ANDROID)
+#include <netinet/tcp.h>
+#endif
 
-#include <boost/asio/write.hpp>
 
 #include <vsomeip/defines.hpp>
 #include <vsomeip/internal/logger.hpp>
 
+#ifdef ANDROID
+#include "../../configuration/include/internal_android.hpp"
+#else
+#include "../../configuration/include/internal.hpp"
+#endif
+#include "../include/tcp_socket.hpp"
 #include "../include/endpoint_host.hpp"
 #include "../include/local_tcp_client_endpoint_impl.hpp"
 #include "../include/local_tcp_server_endpoint_impl.hpp"
@@ -86,8 +94,7 @@ void local_tcp_client_endpoint_impl::stop() {
     }
     {
         std::lock_guard<std::mutex> its_lock(connect_timer_mutex_);
-        boost::system::error_code ec;
-        connect_timer_.cancel(ec);
+        connect_timer_.cancel();
     }
     connect_timeout_ = VSOMEIP_DEFAULT_CONNECT_TIMEOUT;
 
@@ -130,13 +137,39 @@ void local_tcp_client_endpoint_impl::connect() {
                             << " remote: " << remote_.port() << " endpoint: " << this
                             << " state_: " << static_cast<int>(state_.load());
         }
-        socket_->set_option(boost::asio::socket_base::keep_alive(true), its_error);
-        if (its_error) {
-            VSOMEIP_WARNING << "ltcei::connect: couldn't enable "
-                            << "keep_alive: " << its_error.message() << " remote:" << remote_.port()
-                            << " endpoint > " << this << " state_ > "
-                            << static_cast<int>(state_.load());
+
+        // connection in the same host (and not across a host and guest or similar)
+        // important, as we can (MUST!) be lax in the socket options - no keep alive necessary
+        if (local_.address() == remote_.address()) {
+            // disable keep alive
+            socket_->set_option(boost::asio::socket_base::keep_alive(false), its_error);
+            if (its_error) {
+                VSOMEIP_WARNING << "ltcei::connect: couldn't disable "
+                                << "keep_alive: " << its_error.message()
+                                << " remote:" << remote_.port() << " endpoint > " << this
+                                << " state_ > " << static_cast<int>(state_.load());
+            }
+        } else {
+            // enable keep alive
+            socket_->set_option(boost::asio::socket_base::keep_alive(true), its_error);
+            if (its_error) {
+                VSOMEIP_WARNING << "ltcei::connect: couldn't enable "
+                                << "keep_alive: " << its_error.message()
+                                << " remote:" << remote_.port() << " endpoint > " << this
+                                << " state_ > " << static_cast<int>(state_.load());
+            }
+
+#if defined(__linux__) || defined(ANDROID)
+            // set a user timeout
+            // along the keep alives, this ensures connection closes if endpoint is unreachable
+            unsigned int opt = LOCAL_TCP_USER_TIMEOUT;
+            if (!socket_->set_user_timeout(opt)) {
+                VSOMEIP_WARNING << "ltcei::" << __func__
+                                << ": could not setsockopt(TCP_USER_TIMEOUT), errno " << errno;
+            }
+#endif
         }
+
         // Setting the TIME_WAIT to 0 seconds forces RST to always be sent in reponse to a FIN
         // Since this is endpoint for internal communication, setting the TIME_WAIT to 1-5 seconds
         // should be enough to ensure the ACK to the FIN arrives to the server endpoint.
@@ -164,8 +197,9 @@ void local_tcp_client_endpoint_impl::connect() {
                             << " endpoint > " << this << " state_ > "
                             << static_cast<int>(state_.load());
             try {
-                strand_.post(std::bind(&client_endpoint_impl::connect_cbk, shared_from_this(),
-                                       its_connect_error));
+                boost::asio::post(strand_,
+                                  std::bind(&client_endpoint_impl::connect_cbk, shared_from_this(),
+                                            its_connect_error));
             } catch (const std::exception& e) {
                 VSOMEIP_ERROR << "ltcei::connect: " << e.what() << " endpoint > " << this
                               << " state_ > " << static_cast<int>(state_.load());
@@ -191,9 +225,9 @@ void local_tcp_client_endpoint_impl::connect() {
                 << " endpoint > " << this;
         its_connect_error = its_error;
         try {
-            strand_.post(
-                std::bind(&client_endpoint_impl::connect_cbk, shared_from_this(),
-                        its_connect_error));
+            boost::asio::post(strand_,
+                              std::bind(&client_endpoint_impl::connect_cbk, shared_from_this(),
+                                        its_connect_error));
         } catch (const std::exception &e) {
             VSOMEIP_ERROR << "ltcei::connect: " << e.what()
                           << " endpoint > " << this;
@@ -262,21 +296,13 @@ void local_tcp_client_endpoint_impl::send_queued(std::pair<message_buffer_ptr_t,
     {
         std::lock_guard<std::mutex> its_lock(socket_mutex_);
         if(socket_->is_open()) {
-            boost::asio::async_write(
-                *socket_,
-                bufs,
-                strand_.wrap(
-                    std::bind(
-                        &client_endpoint_impl::send_cbk,
-                        std::dynamic_pointer_cast<
-                        local_tcp_client_endpoint_impl
-                        >(shared_from_this()),
-                        std::placeholders::_1,
-                        std::placeholders::_2,
-                        _entry.first
-                    )
-                )
-            );
+            socket_->async_write(bufs,
+                                 // ensure the callback keeps the buffer alive by copying the
+                                 // shared_ptr of the buffer
+                                 strand_.wrap([self = shared_from_this(),
+                                               buffer = _entry.first](auto ec, size_t length) {
+                                     self->send_cbk(ec, length, buffer);
+                                 }));
         } else {
             VSOMEIP_WARNING << "ltcei::" << __func__ << ": try to send while socket was not open | endpoint > " << this;
             was_not_connected_ = true;
@@ -391,10 +417,7 @@ void local_tcp_client_endpoint_impl::print_status() {
 }
 
 std::string local_tcp_client_endpoint_impl::get_remote_information() const {
-
-    boost::system::error_code ec;
-    return remote_.address().to_string(ec) + ":"
-            + std::to_string(remote_.port());
+    return remote_.address().to_string() + ":" + std::to_string(remote_.port());
 }
 
 bool local_tcp_client_endpoint_impl::check_packetizer_space(std::uint32_t _size) const {

@@ -11,7 +11,6 @@
 #include <boost/system/error_code.hpp>
 
 #include <vsomeip/constants.hpp>
-#include <vsomeip/error.hpp>
 #include <vsomeip/payload.hpp>
 #include <vsomeip/primitive_types.hpp>
 #include <vsomeip/runtime.hpp>
@@ -23,7 +22,7 @@
 #include "../include/remote_subscription.hpp"
 #include "../../configuration/include/configuration.hpp"
 #include "../../endpoints/include/endpoint_manager_impl.hpp"
-#include "../../endpoints/include/netlink_connector.hpp"
+#include "../../endpoints/include/abstract_socket_factory.hpp"
 #include "../../protocol/include/deregister_application_command.hpp"
 #include "../../protocol/include/distribute_security_policies_command.hpp"
 #include "../../protocol/include/dummy_command.hpp"
@@ -105,7 +104,7 @@ void routing_manager_stub::start() {
         // Wait VSOMEIP_MAX_CONNECT_TIMEOUT * 2 and expect after that time
         // that all client_ids are used have to be connected to the routing.
         // Otherwise they can be marked as "erroneous client".
-        client_id_timer_.expires_from_now(std::chrono::milliseconds(VSOMEIP_MAX_CONNECT_TIMEOUT * 2));
+        client_id_timer_.expires_after(std::chrono::milliseconds(VSOMEIP_MAX_CONNECT_TIMEOUT * 2));
         client_id_timer_.async_wait(
             std::bind(
                     &routing_manager_stub::on_client_id_timer_expired,
@@ -136,8 +135,16 @@ void routing_manager_stub::start() {
     {
         std::scoped_lock its_thread_pool_lock(client_registration_thread_pool_mutex_);
         for (size_t i = 0; i < VSOMEIP_DEFAULT_REGISTER_THREAD_COUNT; i++) {
-            auto its_thread = std::make_shared<std::thread>(
-                    std::bind(&routing_manager_stub::client_registration_func, this));
+            auto its_thread = std::make_shared<std::thread>([this, i]() {
+#if defined(__linux__) || defined(ANDROID)
+                std::stringstream s;
+                s << std::hex << std::setfill('0') << std::setw(4) << host_->get_client() << "_reg_"
+                  << std::setw(2) << i;
+                pthread_setname_np(pthread_self(), s.str().c_str());
+#endif
+                client_registration_func();
+            });
+
             client_registration_thread_pool_[its_thread->get_id()] = its_thread;
         }
     }
@@ -880,7 +887,7 @@ void routing_manager_stub::on_register_application(client_t _client, bool& conti
         }
     }
 #endif // !VSOMEIP_DISABLE_SECURITY
-    if (!endpoint->wait_connecting_timer()) {
+    if (endpoint == nullptr || !endpoint->wait_connecting_timer()) {
         VSOMEIP_WARNING << "Application: " << std::hex << _client << " endpoint " << endpoint
                         << " failed to start. Removing it.";
         remove_client_connections(_client);
@@ -1000,14 +1007,6 @@ void routing_manager_stub::on_offered_service_request(client_t _client,
 }
 
 void routing_manager_stub::client_registration_func(void) {
-#if defined(__linux__) || defined(ANDROID)
-    {
-        std::stringstream s;
-        s << std::hex << std::setfill('0') << std::setw(4) << host_->get_client() << "_client_reg_"
-          << std::hex << std::this_thread::get_id();
-        pthread_setname_np(pthread_self(), s.str().c_str());
-    }
-#endif
     std::unique_lock<std::mutex> its_lock(client_registration_mutex_);
     while (client_registration_running_) {
         client_registration_condition_.wait(its_lock, [this] {
@@ -1155,8 +1154,9 @@ void routing_manager_stub::init_routing_endpoint() {
 #if defined(__linux__) || defined(ANDROID)
     } else {
         auto its_host_address = configuration_->get_routing_host_address();
-        local_link_connector_ = std::make_shared<netlink_connector>(
-                io_, its_host_address, boost::asio::ip::address(), false); // routing host doesn't need link up
+        local_link_connector_ = abstract_socket_factory::get()->create_netlink_connector(
+                io_, its_host_address, boost::asio::ip::address(),
+                false); // routing host doesn't need link up
         if (local_link_connector_) {
             local_link_connector_->register_net_if_changes_handler(
                 std::bind(&routing_manager_stub::on_net_state_change,
@@ -1740,9 +1740,8 @@ void routing_manager_stub::start_watchdog() {
     {
         std::lock_guard<std::mutex> its_lock(watchdog_timer_mutex_);
         // Divide / 2 as start and check sleep each
-        watchdog_timer_.expires_from_now(
-                std::chrono::milliseconds(
-                        configuration_->get_watchdog_timeout() / 2));
+        watchdog_timer_.expires_after(
+                std::chrono::milliseconds(configuration_->get_watchdog_timeout() / 2));
 
         watchdog_timer_.async_wait(its_callback);
     }
@@ -1779,9 +1778,8 @@ void routing_manager_stub::check_watchdog() {
             };
     {
         std::lock_guard<std::mutex> its_lock(watchdog_timer_mutex_);
-        watchdog_timer_.expires_from_now(
-                std::chrono::milliseconds(
-                        configuration_->get_watchdog_timeout() / 2));
+        watchdog_timer_.expires_after(
+                std::chrono::milliseconds(configuration_->get_watchdog_timeout() / 2));
         watchdog_timer_.async_wait(its_callback);
     }
 }
@@ -1820,14 +1818,8 @@ bool routing_manager_stub::send_ping(client_t _client) {
             // or timeout of previous ping.
             has_sent = true;
         } else {
-            boost::system::error_code ec;
-            pinged_clients_timer_.cancel(ec);
-            if (ec) {
-                VSOMEIP_ERROR << "routing_manager_stub::send_ping cancellation of "
-                        "timer failed: " << ec.message();
-            }
-            const std::chrono::steady_clock::time_point now(
-                    std::chrono::steady_clock::now());
+            pinged_clients_timer_.cancel();
+            const std::chrono::steady_clock::time_point now(std::chrono::steady_clock::now());
 
             std::chrono::milliseconds next_timeout(configured_watchdog_timeout_);
             for (const auto &tp : pinged_clients_) {
@@ -1841,12 +1833,7 @@ bool routing_manager_stub::send_ping(client_t _client) {
 
             pinged_clients_[_client] = now;
 
-            ec.clear();
-            pinged_clients_timer_.expires_from_now(next_timeout, ec);
-            if (ec) {
-                VSOMEIP_ERROR << "routing_manager_stub::send_ping setting "
-                    "expiry time of timer failed: " << ec.message();
-            }
+            pinged_clients_timer_.expires_after(next_timeout);
             pinged_clients_timer_.async_wait(
                     std::bind(&routing_manager_stub::on_ping_timer_expired, this,
                             std::placeholders::_1));
@@ -1915,12 +1902,7 @@ void routing_manager_stub::on_ping_timer_expired(
         host_->handle_client_error(client);
     }
     if (pinged_clients_remaining) {
-        boost::system::error_code ec;
-        pinged_clients_timer_.expires_from_now(next_timeout, ec);
-        if (ec) {
-            VSOMEIP_ERROR<< "routing_manager_stub::on_ping_timer_expired "
-            "setting expiry time of timer failed: " << ec.message();
-        }
+        pinged_clients_timer_.expires_after(next_timeout);
         pinged_clients_timer_.async_wait(
                 std::bind(&routing_manager_stub::on_ping_timer_expired, this,
                         std::placeholders::_1));
@@ -1932,12 +1914,7 @@ void routing_manager_stub::remove_from_pinged_clients(client_t _client) {
     if (!pinged_clients_.size()) {
         return;
     }
-    boost::system::error_code ec;
-    pinged_clients_timer_.cancel(ec);
-    if (ec) {
-        VSOMEIP_ERROR << "routing_manager_stub::remove_from_pinged_clients "
-                "cancellation of timer failed: " << ec.message();
-    }
+    pinged_clients_timer_.cancel();
     pinged_clients_.erase(_client);
 
     if (!pinged_clients_.size()) {
@@ -1955,12 +1932,7 @@ void routing_manager_stub::remove_from_pinged_clients(client_t _client) {
             next_timeout = its_clients_timeout;
         }
     }
-    ec.clear();
-    pinged_clients_timer_.expires_from_now(next_timeout, ec);
-    if (ec) {
-        VSOMEIP_ERROR<< "routing_manager_stub::remove_from_pinged_clients "
-        "setting expiry time of timer failed: " << ec.message();
-    }
+    pinged_clients_timer_.expires_after(next_timeout);
     pinged_clients_timer_.async_wait(
             std::bind(&routing_manager_stub::on_ping_timer_expired, this,
                       std::placeholders::_1));
@@ -2464,20 +2436,13 @@ routing_manager_stub::add_pending_security_update_timer(
 
     std::shared_ptr<boost::asio::steady_timer> its_timer
         = std::make_shared<boost::asio::steady_timer>(io_);
+    its_timer->expires_after(std::chrono::milliseconds(3000));
 
-    boost::system::error_code ec;
-    its_timer->expires_from_now(std::chrono::milliseconds(3000), ec);
-    if (!ec) {
-        its_timer->async_wait(
-                std::bind(
-                        &routing_manager_stub::on_security_update_timeout,
-                        shared_from_this(),
-                        std::placeholders::_1, _id, its_timer));
-    } else {
-        VSOMEIP_ERROR << __func__
-                << "[" << std::dec << _id << "]: timer creation: "
-                << ec.message();
-    }
+    auto its_me {shared_from_this()};
+    its_timer->async_wait([its_me, _id, its_timer](const boost::system::error_code& _error) {
+        its_me->on_security_update_timeout(_error, _id, its_timer);
+    });
+
     std::lock_guard<std::mutex> its_lock(security_update_timers_mutex_);
     security_update_timers_[_id] = its_timer;
 }
@@ -2776,8 +2741,7 @@ void routing_manager_stub::on_security_update_response(
                 std::lock_guard<std::mutex> its_lock(security_update_timers_mutex_);
                 auto found_timer = security_update_timers_.find(_id);
                 if (found_timer != security_update_timers_.end()) {
-                    boost::system::error_code ec;
-                    found_timer->second->cancel(ec);
+                    found_timer->second->cancel();
                     security_update_timers_.erase(found_timer);
                 } else {
                     VSOMEIP_WARNING << __func__ << ": Received all responses "

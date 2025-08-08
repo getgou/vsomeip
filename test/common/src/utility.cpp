@@ -95,10 +95,9 @@ utility::get_all_files_in_dir(const std::string &_dir_path,
 
 std::string
 utility::get_policies_path() {
-
-    return boost::filesystem::canonical(
-            boost::filesystem::current_path()).string()
-            + "/../test/common/examples_policies";
+    std::string source_dir = SOURCE_DIR;
+    boost::filesystem::path policies_path(source_dir+"/test/common/examples_policies");
+    return policies_path.string();
 }
 
 vsomeip_sec_client_t
@@ -120,7 +119,7 @@ utility::force_check_credentials(
                 = security.get_child("check_credentials");
             if (credentials.get_value<std::string>().compare(_value)) {
                 security.erase("check_credentials");
-                credentials.put("check_credentials", _value);
+                security.put("check_credentials", _value);
             }
         }
         catch(...) {}

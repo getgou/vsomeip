@@ -6,18 +6,28 @@
 #include <deque>
 #include <iomanip>
 #include <sstream>
+#if defined(__linux__) || defined(ANDROID)
+#include <netinet/tcp.h>
+#endif
 
 #include <sys/types.h>
 #include <boost/asio/write.hpp>
 
 #include <vsomeip/internal/logger.hpp>
 
+#ifdef ANDROID
+#include "../../configuration/include/internal_android.hpp"
+#else
+#include "../../configuration/include/internal.hpp"
+#endif
 #include "../include/endpoint_host.hpp"
+#include "../include/abstract_socket_factory.hpp"
 #include "../include/local_tcp_server_endpoint_impl.hpp"
 #include "../include/local_server_endpoint_impl_receive_op.hpp"
 #include "../../configuration/include/configuration.hpp"
 #include "../../protocol/include/assign_client_command.hpp"
 #include "../../protocol/include/assign_client_ack_command.hpp"
+#include "../../protocol/include/protocol.hpp"
 #include "../../routing/include/routing_host.hpp"
 #include "../../security/include/policy_manager_impl.hpp"
 #include "../../security/include/security.hpp"
@@ -28,19 +38,18 @@ namespace vsomeip_v3 {
 
 local_tcp_server_endpoint_impl::local_tcp_server_endpoint_impl(
         const std::shared_ptr<endpoint_host>& _endpoint_host,
-        const std::shared_ptr<routing_host>& _routing_host,
-        boost::asio::io_context &_io,
-        const std::shared_ptr<configuration>& _configuration,
-        bool _is_routing_endpoint)
-    : local_tcp_server_endpoint_base_impl(_endpoint_host, _routing_host, _io, _configuration),
-      acceptor_(_io),
-      buffer_shrink_threshold_(_configuration->get_buffer_shrink_threshold()),
-      is_routing_endpoint_(_is_routing_endpoint) {
+        const std::shared_ptr<routing_host>& _routing_host, boost::asio::io_context& _io,
+        const std::shared_ptr<configuration>& _configuration, bool _is_routing_endpoint) :
+    local_tcp_server_endpoint_base_impl(_endpoint_host, _routing_host, _io, _configuration),
+    acceptor_(abstract_socket_factory::get()->create_tcp_acceptor(_io)),
+    buffer_shrink_threshold_(_configuration->get_buffer_shrink_threshold()),
+    is_routing_endpoint_(_is_routing_endpoint) {
     is_supporting_magic_cookies_ = false;
 
     this->max_message_size_ = _configuration->get_max_message_size_local();
     this->queue_limit_ = _configuration->get_endpoint_queue_limit_local();
 }
+local_tcp_server_endpoint_impl::~local_tcp_server_endpoint_impl() = default;
 bool local_tcp_server_endpoint_impl::is_local() const {
 
     return true;
@@ -54,21 +63,28 @@ void local_tcp_server_endpoint_impl::init(const endpoint_type& _local,
 
 void local_tcp_server_endpoint_impl::init_unlocked(const endpoint_type& _local,
                                                    boost::system::error_code& _error) {
-    acceptor_.open(_local.protocol(), _error);
+    acceptor_->open(_local.protocol(), _error);
     if (_error)
         return;
 
 #ifndef _WIN32
-    acceptor_.set_option(boost::asio::socket_base::reuse_address(true), _error);
+    acceptor_->set_option(boost::asio::socket_base::reuse_address(true), _error);
     if (_error)
         return;
 #endif
 
-    acceptor_.bind(_local, _error);
+#if defined(__linux__) || defined(ANDROID)
+    if (!acceptor_->set_native_option_free_bind()) {
+        VSOMEIP_ERROR << "ltsei::" << __func__ << ": could not setsockopt(IP_FREEBIND), errno "
+                      << errno;
+    }
+#endif
+
+    acceptor_->bind(_local, _error);
     if (_error)
         return;
 
-    acceptor_.listen(boost::asio::socket_base::max_connections, _error);
+    acceptor_->listen(boost::asio::socket_base::max_listen_connections, _error);
     if (_error)
         return;
 
@@ -78,18 +94,18 @@ void local_tcp_server_endpoint_impl::init_unlocked(const endpoint_type& _local,
 
 void local_tcp_server_endpoint_impl::deinit() {
     boost::system::error_code its_error;
-    acceptor_.close(its_error);
+    acceptor_->close(its_error);
 }
 
 void local_tcp_server_endpoint_impl::start() {
 
     std::lock_guard<std::mutex> its_lock(acceptor_mutex_);
-    if (!acceptor_.is_open()) {
+    if (!acceptor_->is_open()) {
         boost::system::error_code its_error;
         init_unlocked(local_, its_error);
     }
 
-    if (acceptor_.is_open()) {
+    if (acceptor_->is_open()) {
         connection::ptr new_connection = connection::create(
                 std::dynamic_pointer_cast<local_tcp_server_endpoint_impl>(
                         shared_from_this()), max_message_size_,
@@ -98,17 +114,12 @@ void local_tcp_server_endpoint_impl::start() {
 
         {
             std::unique_lock<std::mutex> its_lock(new_connection->get_socket_lock());
-            acceptor_.async_accept(
-                new_connection->get_socket(),
-                std::bind(
-                    &local_tcp_server_endpoint_impl::accept_cbk,
-                    std::dynamic_pointer_cast<
-                        local_tcp_server_endpoint_impl
-                    >(shared_from_this()),
-                    new_connection,
-                    std::placeholders::_1
-                )
-            );
+            acceptor_->async_accept(
+                    new_connection->get_socket(),
+                    std::bind(&local_tcp_server_endpoint_impl::accept_cbk,
+                              std::dynamic_pointer_cast<local_tcp_server_endpoint_impl>(
+                                      shared_from_this()),
+                              new_connection, std::placeholders::_1));
         }
     }
 }
@@ -118,9 +129,9 @@ void local_tcp_server_endpoint_impl::stop() {
     server_endpoint_impl::stop();
     {
         std::lock_guard<std::mutex> its_lock(acceptor_mutex_);
-        if (acceptor_.is_open()) {
+        if (acceptor_->is_open()) {
             boost::system::error_code its_error;
-            acceptor_.close(its_error);
+            acceptor_->close(its_error);
         }
     }
     {
@@ -216,8 +227,8 @@ bool local_tcp_server_endpoint_impl::add_connection(const client_t &_client,
         connections_[_client] = _connection;
         ret = true;
     } else {
-        VSOMEIP_WARNING << "Attempt to add already existing "
-            "connection to client " << std::hex << _client << " endpoint > " << this;
+        VSOMEIP_WARNING << "Attempt to add already existing connection to client " << std::hex
+                        << _client << " endpoint > " << this;
     }
     return ret;
 }
@@ -226,29 +237,31 @@ void local_tcp_server_endpoint_impl::remove_connection(
         const client_t &_client) {
 
     std::lock_guard<std::mutex> its_lock(connections_mutex_);
-    connections_.erase(_client);
+    if (!connections_.erase(_client)) {
+        VSOMEIP_WARNING << "Client " << std::hex << _client << " has no registered connection to "
+                        << " remove, endpoint > " << this;
+    }
 }
 
 void local_tcp_server_endpoint_impl::accept_cbk(
         connection::ptr _connection, boost::system::error_code const &_error) {
     if (!_error) {
         boost::system::error_code its_error;
-        endpoint_type remote;
         {
             std::unique_lock<std::mutex> its_socket_lock(_connection->get_socket_lock());
-            socket_type &new_connection_socket = _connection->get_socket();
+            auto& new_connection_socket = _connection->get_socket();
+
+            endpoint_type remote = new_connection_socket.remote_endpoint(its_error);
+            if (its_error) {
+                VSOMEIP_WARNING << "ltsei::" << __func__ << ": could not read endpoint, "
+                                << "error: " << its_error.message();
+            }
 
             // Nagle algorithm off
             new_connection_socket.set_option(boost::asio::ip::tcp::no_delay(true), its_error);
             if (its_error) {
                 VSOMEIP_WARNING << "ltsei::" << __func__ << ": couldn't disable "
                                 << "Nagle algorithm: " << its_error.message()
-                                << " endpoint > " << this;
-            }
-            new_connection_socket.set_option(boost::asio::socket_base::keep_alive(true), its_error);
-            if (its_error) {
-                VSOMEIP_WARNING << "ltsei::" << __func__ << ": couldn't enable "
-                                << "keep_alive: " << its_error.message()
                                 << " endpoint > " << this;
             }
             // Setting the TIME_WAIT to 0 seconds forces RST to always be sent in reponse to a FIN
@@ -259,6 +272,38 @@ void local_tcp_server_endpoint_impl::accept_cbk(
             if (its_error) {
                 VSOMEIP_WARNING << "ltsei::" << __func__ << ": setting SO_LINGER failed ("
                                 << its_error.message() << ") " << this;
+            }
+
+            // connection in the same host (and not across a host and guest or similar)
+            // important, as we can (MUST!) be lax in the socket options - no keep alive necessary
+            if (local_.address() == remote.address()) {
+                // disable keep alive
+                new_connection_socket.set_option(boost::asio::socket_base::keep_alive(false),
+                                                 its_error);
+                if (its_error) {
+                    VSOMEIP_WARNING << "ltsei::" << __func__ << ": couldn't disable "
+                                    << "keep_alive: " << its_error.message() << " endpoint > "
+                                    << this;
+                }
+            } else {
+                // enable keep alive
+                new_connection_socket.set_option(boost::asio::socket_base::keep_alive(true),
+                                                 its_error);
+                if (its_error) {
+                    VSOMEIP_WARNING << "ltsei::" << __func__ << ": couldn't enable "
+                                    << "keep_alive: " << its_error.message() << " endpoint > "
+                                    << this;
+                }
+
+#if defined(__linux__) || defined(ANDROID)
+                // set a user timeout
+                // along the keep alives, this ensures connection closes if endpoint is unreachable
+                unsigned int opt = LOCAL_TCP_USER_TIMEOUT;
+                if (!new_connection_socket.set_user_timeout(opt)) {
+                    VSOMEIP_WARNING << "ltsei::" << __func__
+                                    << ": could not setsockopt(TCP_USER_TIMEOUT), errno " << errno;
+                }
+#endif
             }
         }
     }
@@ -292,24 +337,15 @@ void local_tcp_server_endpoint_impl::accept_cbk(
 ///////////////////////////////////////////////////////////////////////////////
 
 local_tcp_server_endpoint_impl::connection::connection(
-        const std::shared_ptr<local_tcp_server_endpoint_impl> &_server,
-        std::uint32_t _max_message_size,
-        std::uint32_t _initial_recv_buffer_size,
-        std::uint32_t _buffer_shrink_threshold,
-        boost::asio::io_context &_io)
-    : socket_(_io),
-      server_(_server),
-      recv_buffer_size_initial_(_initial_recv_buffer_size + 8),
-      max_message_size_(_max_message_size),
-      recv_buffer_(recv_buffer_size_initial_, 0),
-      recv_buffer_size_(0),
-      missing_capacity_(0),
-      shrink_count_(0),
-      buffer_shrink_threshold_(_buffer_shrink_threshold),
-      bound_client_(VSOMEIP_CLIENT_UNSET),
-      bound_client_host_(""),
-      assigned_client_(false),
-      is_stopped_(true) {
+        const std::shared_ptr<local_tcp_server_endpoint_impl>& _server,
+        std::uint32_t _max_message_size, std::uint32_t _initial_recv_buffer_size,
+        std::uint32_t _buffer_shrink_threshold, boost::asio::io_context& _io) :
+    socket_(abstract_socket_factory::get()->create_tcp_socket(_io)), server_(_server),
+    recv_buffer_size_initial_(_initial_recv_buffer_size + 8), max_message_size_(_max_message_size),
+    recv_buffer_(recv_buffer_size_initial_, 0), recv_buffer_size_(0), missing_capacity_(0),
+    shrink_count_(0), buffer_shrink_threshold_(_buffer_shrink_threshold),
+    bound_client_(VSOMEIP_CLIENT_UNSET), bound_client_host_(""), assigned_client_(false),
+    is_stopped_(true) {
     if (_server->is_routing_endpoint_ &&
             !_server->configuration_->is_security_enabled()) {
         assigned_client_ = true;
@@ -332,9 +368,8 @@ local_tcp_server_endpoint_impl::connection::create(
             _buffer_shrink_threshold, _io));
 }
 
-local_tcp_server_endpoint_impl::socket_type &
-local_tcp_server_endpoint_impl::connection::get_socket() {
-    return socket_;
+tcp_socket& local_tcp_server_endpoint_impl::connection::get_socket() {
+    return *socket_;
 }
 
 std::unique_lock<std::mutex>
@@ -344,7 +379,7 @@ local_tcp_server_endpoint_impl::connection::get_socket_lock() {
 
 void local_tcp_server_endpoint_impl::connection::start() {
     std::lock_guard<std::mutex> its_lock(socket_mutex_);
-    if (socket_.is_open()) {
+    if (socket_->is_open()) {
         const std::size_t its_capacity(recv_buffer_.capacity());
         if (recv_buffer_size_ > its_capacity) {
             VSOMEIP_ERROR << __func__ << "Received buffer size is greater than the buffer capacity!"
@@ -386,15 +421,10 @@ void local_tcp_server_endpoint_impl::connection::start() {
         }
 
         is_stopped_ = false;
-        socket_.async_receive(
-            boost::asio::buffer(&recv_buffer_[recv_buffer_size_], left_buffer_size),
-            std::bind(
-                &local_tcp_server_endpoint_impl::connection::receive_cbk,
-                shared_from_this(),
-                std::placeholders::_1,
-                std::placeholders::_2
-            )
-        );
+        socket_->async_receive(
+                boost::asio::buffer(&recv_buffer_[recv_buffer_size_], left_buffer_size),
+                std::bind(&local_tcp_server_endpoint_impl::connection::receive_cbk,
+                          shared_from_this(), std::placeholders::_1, std::placeholders::_2));
     } else {
         VSOMEIP_WARNING << "ltsei::" << __func__ << ": socket was closed | endpoint > " << this;
     }
@@ -403,16 +433,16 @@ void local_tcp_server_endpoint_impl::connection::start() {
 void local_tcp_server_endpoint_impl::connection::stop() {
     std::lock_guard<std::mutex> its_lock(socket_mutex_);
     is_stopped_ = true;
-    if (socket_.is_open()) {
+    if (socket_->is_open()) {
 #if defined(__linux__) || defined(ANDROID) || defined(__QNX__)
-        if (-1 == fcntl(socket_.native_handle(), F_GETFD)) {
+        if (!socket_->can_read_fd_flags()) {
             VSOMEIP_ERROR << "ltsei: socket/handle closed already '"
                           << std::string(std::strerror(errno)) << "' (" << errno << ") "
                           << get_path_local() << " endpoint > " << this;
         }
 #endif
         boost::system::error_code its_error;
-        socket_.cancel(its_error);
+        socket_->cancel(its_error);
     }
 }
 
@@ -445,17 +475,10 @@ void local_tcp_server_endpoint_impl::connection::send_queued(
 
     {
         std::lock_guard<std::mutex> its_lock(socket_mutex_);
-        boost::asio::async_write(
-            socket_,
-            bufs,
-            std::bind(
-                &local_tcp_server_endpoint_impl::connection::send_cbk,
-                shared_from_this(),
-                _buffer,
-                std::placeholders::_1,
-                std::placeholders::_2
-            )
-        );
+        socket_->async_write(bufs,
+                             std::bind(&local_tcp_server_endpoint_impl::connection::send_cbk,
+                                       shared_from_this(), _buffer, std::placeholders::_1,
+                                       std::placeholders::_2));
     }
 }
 
@@ -477,6 +500,15 @@ client_t local_tcp_server_endpoint_impl::assign_client(
 
     return utility::request_client_id(configuration_,
             its_command.get_name(), its_command.get_client());
+}
+
+void local_tcp_server_endpoint_impl::disconnect_from(const client_t _client) {
+    std::scoped_lock lock {connections_mutex_};
+    if (connections_.find(_client) == connections_.end()) {
+        return;
+    }
+    connections_.at(_client)->stop();
+    connections_.erase(_client);
 }
 
 void local_tcp_server_endpoint_impl::get_configured_times_from_endpoint(
@@ -667,25 +699,47 @@ void local_tcp_server_endpoint_impl::connection::receive_cbk(
                     client_t its_client = its_server->assign_client(
                             &recv_buffer_[its_start], uint32_t(its_end - its_start));
                     {
-                        set_bound_client(its_client);
+                        // order matters, register connection first, as it can fail
+                        if (!its_server->add_connection(its_client, shared_from_this())) {
+                            VSOMEIP_WARNING << std::hex << "Client 0x" << its_host->get_client()
+                                            << " is rejecting new connection with client ID 0x"
+                                            << its_client << " uid/gid= " << std::dec
+                                            << sec_client_.user << "/" << sec_client_.group
+                                            << " because of already existing connection using same "
+                                               "client ID";
+
+                            stop();
+                            return;
+                        }
                         its_host->add_known_client(its_client, get_bound_client_host());
-                        its_server->add_connection(its_client, shared_from_this());
+                        set_bound_client(its_client);
                     }
                     its_server->send_client_identifier(its_client);
                     assigned_client_ = true;
                 } else if (!its_server->is_routing_endpoint_ || assigned_client_) {
                     boost::system::error_code ec;
-                    auto its_endpoint = socket_.remote_endpoint(ec);
+                    auto its_endpoint = socket_->remote_endpoint(ec);
                     if (!ec) {
                         auto its_address = its_endpoint.address();
                         auto its_port = its_endpoint.port();
 
                         if (its_address.is_v4()) {
-                            sec_client_.host
-                                = htonl(uint32_t(its_address.to_v4().to_ulong()));
+                            sec_client_.host = htonl(uint32_t(its_address.to_v4().to_uint()));
                         }
                         sec_client_.port = htons(its_port);
                         its_server->configuration_->get_security()->sync_client(&sec_client_);
+
+                        // Associate a client ID to this connection.
+                        if (bound_client_ == VSOMEIP_CLIENT_UNSET) {
+                            client_t its_client = VSOMEIP_CLIENT_UNSET;
+                            std::memcpy(
+                                    &its_client,
+                                    &recv_buffer_[its_start + protocol::COMMAND_POSITION_CLIENT],
+                                    sizeof(client_t));
+
+                            set_bound_client(its_client);
+                            its_server->add_connection(its_client, shared_from_this());
+                        }
 
                         its_host->on_message(&recv_buffer_[its_start],
                                             uint32_t(its_end - its_start), its_server.get(),
@@ -735,14 +789,23 @@ void local_tcp_server_endpoint_impl::connection::receive_cbk(
         } while (recv_buffer_size_ > 0 && found_message);
     }
 
-    if (is_stopped_ || _error == boost::asio::error::eof
-        || _error == boost::asio::error::connection_reset || is_error) {
+    if (is_stopped_ || is_error || _error == boost::asio::error::eof
+        || _error == boost::asio::error::timed_out || _error == boost::asio::error::bad_descriptor
+        || _error == boost::asio::error::connection_reset) {
+        VSOMEIP_INFO << "ltsei::receive_cbk closing connection due to is_stopped " << is_stopped_
+                     << ", error '" << _error.message() << "', is_error " << is_error
+                     << "', endpoint > " << this;
 
         shutdown_and_close();
         its_server->remove_connection(bound_client_);
         its_server->configuration_->get_policy_manager()->remove_client_to_sec_client_mapping(bound_client_);
+    } else {
+        if (_error) {
+            VSOMEIP_WARNING << "ltsei::receive_cbk received err '" << _error.message()
+                            << "', endpoint > " << this;
+        }
 
-    } else if (_error != boost::asio::error::bad_descriptor) {
+        // schedule next read
         start();
     }
 }
@@ -779,10 +842,10 @@ void local_tcp_server_endpoint_impl::connection::calculate_shrink_count() {
 std::string local_tcp_server_endpoint_impl::connection::get_path_local() const {
     boost::system::error_code ec;
     std::string its_local_path;
-    if (socket_.is_open()) {
-        endpoint_type its_local_endpoint = socket_.local_endpoint(ec);
+    if (socket_->is_open()) {
+        endpoint_type its_local_endpoint = socket_->local_endpoint(ec);
         if (!ec) {
-            its_local_path += its_local_endpoint.address().to_string(ec);
+            its_local_path += its_local_endpoint.address().to_string();
             its_local_path += ":";
             its_local_path += std::to_string(its_local_endpoint.port());
         }
@@ -793,10 +856,10 @@ std::string local_tcp_server_endpoint_impl::connection::get_path_local() const {
 std::string local_tcp_server_endpoint_impl::connection::get_path_remote() const {
     boost::system::error_code ec;
     std::string its_remote_path;
-    if (socket_.is_open()) {
-        endpoint_type its_remote_endpoint = socket_.remote_endpoint(ec);
+    if (socket_->is_open()) {
+        endpoint_type its_remote_endpoint = socket_->remote_endpoint(ec);
         if (!ec) {
-            its_remote_path += its_remote_endpoint.address().to_string(ec);
+            its_remote_path += its_remote_endpoint.address().to_string();
             its_remote_path += ":";
             its_remote_path += std::to_string(its_remote_endpoint.port());
         }
@@ -822,10 +885,10 @@ void local_tcp_server_endpoint_impl::connection::handle_recv_buffer_exception(
     }
     VSOMEIP_ERROR << its_message.str();
     recv_buffer_.clear();
-    if (socket_.is_open()) {
+    if (socket_->is_open()) {
         boost::system::error_code its_error;
-        socket_.shutdown(socket_.shutdown_both, its_error);
-        socket_.close(its_error);
+        socket_->shutdown(tcp_socket::shutdown_both, its_error);
+        socket_->close(its_error);
     }
     std::shared_ptr<local_tcp_server_endpoint_impl> its_server = server_.lock();
     if (its_server) {
@@ -847,8 +910,8 @@ local_tcp_server_endpoint_impl::connection::shutdown_and_close() {
 void
 local_tcp_server_endpoint_impl::connection::shutdown_and_close_unlocked() {
     boost::system::error_code its_error;
-    socket_.shutdown(socket_.shutdown_both, its_error);
-    socket_.close(its_error);
+    socket_->shutdown(tcp_socket::shutdown_both, its_error);
+    socket_->close(its_error);
 }
 
 void local_tcp_server_endpoint_impl::print_status() {
@@ -877,17 +940,12 @@ void local_tcp_server_endpoint_impl::print_status() {
 }
 std::string local_tcp_server_endpoint_impl::get_remote_information(
         const target_data_iterator_type _it) const {
-    boost::system::error_code ec;
-    return _it->first.address().to_string(ec) + ":"
-            + std::to_string(_it->first.port());
+    return _it->first.address().to_string() + ":" + std::to_string(_it->first.port());
 }
 
 std::string local_tcp_server_endpoint_impl::get_remote_information(
         const endpoint_type& _remote) const {
-
-    boost::system::error_code ec;
-    return _remote.address().to_string(ec) + ":"
-            + std::to_string(_remote.port());
+    return _remote.address().to_string() + ":" + std::to_string(_remote.port());
 }
 
 bool local_tcp_server_endpoint_impl::is_reliable() const {

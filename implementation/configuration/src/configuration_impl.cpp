@@ -28,6 +28,7 @@
 #include <vsomeip/structured_types.hpp>
 #include <vsomeip/internal/plugin_manager.hpp>
 
+#include "internal.hpp"
 #include "../include/client.hpp"
 #include "../include/configuration_impl.hpp"
 #include "../include/event.hpp"
@@ -69,9 +70,9 @@ configuration_impl::configuration_impl(const std::string& _path) :
     buffer_shrink_threshold_ {VSOMEIP_DEFAULT_BUFFER_SHRINK_THRESHOLD},
     trace_ {std::make_shared<trace>()}, watchdog_ {std::make_shared<watchdog>()},
     local_clients_keepalive_ {std::make_shared<local_clients_keepalive>()}, log_version_ {true},
-    log_version_interval_ {10}, permissions_uds_ {VSOMEIP_DEFAULT_UDS_PERMISSIONS},
-    network_ {"vsomeip"}, e2e_enabled_ {false}, log_memory_ {false}, log_memory_interval_ {0},
-    log_status_ {false}, log_status_interval_ {0},
+    log_version_interval_ {VSOMEIP_DEFAULT_LOG_INTERVAL},
+    permissions_uds_ {VSOMEIP_DEFAULT_UDS_PERMISSIONS}, network_ {"vsomeip"}, e2e_enabled_ {false},
+    log_memory_ {false}, log_memory_interval_ {0}, log_status_ {false}, log_status_interval_ {0},
     endpoint_queue_limit_external_ {QUEUE_SIZE_UNLIMITED},
     endpoint_queue_limit_local_ {QUEUE_SIZE_UNLIMITED},
     tcp_restart_aborts_max_ {VSOMEIP_MAX_TCP_RESTART_ABORTS},
@@ -95,8 +96,8 @@ configuration_impl::configuration_impl(const std::string& _path) :
 
     policy_manager_ = std::make_shared<policy_manager_impl>();
     security_ = std::make_shared<security>(policy_manager_);
-    unicast_ = unicast_.from_string(VSOMEIP_UNICAST_ADDRESS);
-    netmask_ = netmask_.from_string(VSOMEIP_NETMASK);
+    unicast_ = boost::asio::ip::make_address(VSOMEIP_UNICAST_ADDRESS);
+    netmask_ = boost::asio::ip::make_address(VSOMEIP_NETMASK);
     for (auto i = 0; i < ET_MAX; i++)
         is_configured_[i] = false;
 
@@ -1528,14 +1529,10 @@ bool configuration_impl::check_suppress_events(service_t _service, instance_t _i
         return false;
 
     std::set<suppress_t> event_combinations = {
-        {_service, _instance, _event},
-        {_service, _instance, ANY_EVENT},
-        {_service, ANY_INSTANCE, _event},
-        {_service, ANY_INSTANCE, ANY_EVENT},
-        {ANY_SERVICE, _instance, _event},
-        {ANY_SERVICE, _instance, ANY_EVENT},
-        {ANY_SERVICE, ANY_INSTANCE, _event}
-        };
+            {_service, _instance, _event},       {_service, _instance, ANY_EVENT},
+            {_service, ANY_INSTANCE, _event},    {_service, ANY_INSTANCE, ANY_EVENT},
+            {ANY_SERVICE, _instance, _event},    {ANY_SERVICE, _instance, ANY_EVENT},
+            {ANY_SERVICE, ANY_INSTANCE, _event}, {ANY_SERVICE, ANY_INSTANCE, ANY_EVENT}};
 
     for (const auto &its_event: event_combinations) {
         if (suppress_events_.find(its_event) != std::end(suppress_events_))
@@ -1564,7 +1561,7 @@ void configuration_impl::load_unicast_address(const configuration_element &_elem
             VSOMEIP_WARNING << "Multiple definitions for unicast."
                     "Ignoring definition from " << _element.name_;
         } else {
-            unicast_ = unicast_.from_string(its_value);
+            unicast_ = boost::asio::ip::make_address(its_value);
             is_configured_[ET_UNICAST] = true;
         }
     } catch (...) {
@@ -1580,7 +1577,7 @@ void configuration_impl::load_netmask(const configuration_element &_element) {
                 VSOMEIP_WARNING << "Multiple definitions for netmask/prefix."
                         "Ignoring netmask definition from " << _element.name_;
             } else {
-                netmask_ = netmask_.from_string(*its_value);
+                netmask_ = boost::asio::ip::make_address(*its_value);
                 is_configured_[ET_NETMASK] = true;
             }
         }
@@ -4429,7 +4426,7 @@ void configuration_impl::load_acceptance_data(const boost::property_tree::ptree&
             std::string its_value(i->second.data());
 
             if (its_key == "address") {
-                its_address = boost::asio::ip::address::from_string(its_value);
+                its_address = boost::asio::ip::make_address(its_value);
             } else if (its_key == "path") {
                 load_activation_file_path(its_paths, i->second);
             } else if (its_key == "reliable" || its_key == "unreliable") {
@@ -4822,22 +4819,20 @@ configuration_impl::get_default_debounce(service_t _service, instance_t _instanc
     return nullptr;
 }
 
-std::shared_ptr<debounce_filter_impl_t> configuration_impl::get_debounce(client_t _client,
+
+std::shared_ptr<debounce_filter_impl_t> configuration_impl::get_debounce(const std::string& _name,
                                                                          service_t _service,
                                                                          instance_t _instance,
                                                                          event_t _event) const {
-    // Try to find application (client) specific debounce configuration
-    for (auto& [its_name, its_application] : applications_) {
-        if (its_application.client_ == _client) {
-            const auto search =
-                    its_application.debounces_.find(service_instance_t {_service, _instance});
-            if (search != its_application.debounces_.end()) {
-                const auto found_event = search->second.find(_event);
-                if (found_event != search->second.end()) {
-                    return found_event->second;
-                }
+    auto its_application {applications_.find(_name)};
+    if (its_application != applications_.end()) {
+        const auto search =
+                its_application->second.debounces_.find(service_instance_t {_service, _instance});
+        if (search != its_application->second.debounces_.end()) {
+            const auto found_event = search->second.find(_event);
+            if (found_event != search->second.end()) {
+                return found_event->second;
             }
-            break;
         }
     }
     return nullptr;

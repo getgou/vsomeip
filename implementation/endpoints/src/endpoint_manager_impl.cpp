@@ -38,7 +38,12 @@ endpoint_manager_impl::endpoint_manager_impl(routing_manager_base* const _rm,
                                              boost::asio::io_context& _io,
                                              const std::shared_ptr<configuration>& _configuration) :
     endpoint_manager_base(_rm, _io, _configuration), is_processing_options_(true),
-    options_thread_(std::bind(&endpoint_manager_impl::process_multicast_options, this)) {
+    options_thread_([this]() {
+#if defined(__linux__) || defined(ANDROID) || defined(__QNX__)
+        pthread_setname_np(pthread_self(), "m_multicast");
+#endif
+        process_multicast_options();
+    }) {
 
     local_port_ = port_t(_configuration->get_routing_host_port() + 1);
     if (!is_local_routing_) {
@@ -1178,12 +1183,10 @@ std::shared_ptr<endpoint> endpoint_manager_impl::create_remote_client(
                 if (found_service_info) {
                     found_service_info->set_endpoint(its_endpoint, _reliable);
                 }
-                boost::system::error_code ec;
                 VSOMEIP_INFO << "endpoint_manager_impl::create_remote_client: "
-                        << its_endpoint_def->get_address().to_string(ec)
-                        << ":" << std::dec << its_endpoint_def->get_port()
-                        << " reliable: " << _reliable
-                        << " using local port: " << std::dec << its_local_port;
+                             << its_endpoint_def->get_address().to_string() << ":" << std::dec
+                             << its_endpoint_def->get_port() << " reliable: " << _reliable
+                             << " using local port: " << std::dec << its_local_port;
             }
         }
     }
@@ -1272,6 +1275,7 @@ endpoint_manager_impl::log_client_states() const {
             return (_a.second > _b.second);
         });
 
+    // NOTE: limit is important, do *NOT* want an arbitrarily big string!
     size_t its_max(std::min(size_t(5), its_client_queue_sizes.size()));
     for (size_t i = 0; i < its_max; i++) {
         its_log << std::hex << std::setfill('0') << std::setw(4)
@@ -1284,7 +1288,7 @@ endpoint_manager_impl::log_client_states() const {
     }
 
     if (its_log.str().length() > 0)
-        VSOMEIP_INFO << "ECQ: [" << its_log.str() << "]";
+        VSOMEIP_INFO << "ECQ: " << its_client_queue_sizes.size() << " [" << its_log.str() << "]";
 }
 
 void
@@ -1322,6 +1326,7 @@ endpoint_manager_impl::log_server_states() const {
             return (_a.second > _b.second);
         });
 
+    // NOTE: limit is important, do *NOT* want an arbitrarily big string!
     size_t its_max(std::min(size_t(5), its_client_queue_sizes.size()));
     for (size_t i = 0; i < its_max; i++) {
         its_log << std::dec << its_client_queue_sizes[i].first.first
@@ -1332,7 +1337,7 @@ endpoint_manager_impl::log_server_states() const {
     }
 
     if (its_log.str().length() > 0)
-        VSOMEIP_INFO << "ESQ: [" << its_log.str() << "]";
+        VSOMEIP_INFO << "ESQ: " << its_client_queue_sizes.size() << " [" << its_log.str() << "]";
 }
 
 void
@@ -1343,45 +1348,58 @@ endpoint_manager_impl::add_multicast_option(const multicast_option_t &_option) {
     options_condition_.notify_one();
 }
 
+bool endpoint_manager_impl::check_options_queue() {
+
+    if (options_queue_.empty()) {
+        return false;
+    }
+
+    if (!static_cast<routing_manager_impl*>(rm_)->is_external_routing_ready()) {
+        return false;
+    }
+
+    return true;
+}
+
 void
 endpoint_manager_impl::process_multicast_options() {
 
     std::unique_lock<std::mutex> its_lock(options_mutex_);
     while (is_processing_options_) {
-        if (options_queue_.size() > 0
-        && static_cast<routing_manager_impl*>(rm_)->is_external_routing_ready()) {
-            auto its_front = options_queue_.front();
-            options_queue_.pop();
-            auto its_udp_server_endpoint =
-                    std::dynamic_pointer_cast<udp_server_endpoint_impl>(its_front.endpoint_);
-            if (its_udp_server_endpoint) {
-                // Unlock before setting the option as this might block
-                its_lock.unlock();
+        options_condition_.wait(
+                its_lock, [this] { return check_options_queue() || !is_processing_options_; });
 
-                boost::system::error_code its_error;
-                its_udp_server_endpoint->set_multicast_option(
-                    its_front.address_, its_front.is_join_, its_error);
+        if (!is_processing_options_) {
+            return;
+        }
 
+        auto its_front = options_queue_.front();
+        options_queue_.pop();
+        auto its_udp_server_endpoint =
+                std::dynamic_pointer_cast<udp_server_endpoint_impl>(its_front.endpoint_);
+        if (its_udp_server_endpoint) {
+            // Unlock before setting the option as this might block
+            its_lock.unlock();
 
-                // Lock again after setting the option
-                its_lock.lock();
+            boost::system::error_code its_error;
+            its_udp_server_endpoint->set_multicast_option(its_front.address_, its_front.is_join_,
+                                                          its_error);
 
-                if (its_error) {
-                    VSOMEIP_ERROR << __func__ << ": "
-                                  << (its_front.is_join_ ? "joining " : "leaving ")
-                                  << its_front.address_ << " (" << its_error.message() << ")";
+            // Lock again after setting the option
+            its_lock.lock();
 
-                    if(its_front.is_join_) {
-                        multicast_option_t its_leave_option {
-                            its_front.endpoint_, false, its_front.address_};
+            if (its_error) {
+                VSOMEIP_ERROR << __func__ << ": " << (its_front.is_join_ ? "joining " : "leaving ")
+                              << its_front.address_ << " (" << its_error.message() << ")";
 
-                        options_queue_.push(its_leave_option);
-                        options_queue_.push(its_front);
-                    }
+                if(its_front.is_join_) {
+                    multicast_option_t its_leave_option {its_front.endpoint_, false,
+                                                         its_front.address_};
+
+                    options_queue_.push(its_leave_option);
+                    options_queue_.push(its_front);
                 }
             }
-        } else {
-            options_condition_.wait(its_lock);
         }
     }
 }

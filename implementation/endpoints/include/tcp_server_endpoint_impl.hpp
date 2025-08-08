@@ -65,6 +65,12 @@ public:
     void print_status();
 
     bool is_suspended() const;
+
+    /// @brief Disconnects from the given client.
+    ///
+    /// @param _client ID of the remote client.
+    void disconnect_from(const client_t _client) override;
+
 private:
     class connection: public std::enable_shared_from_this<connection> {
 
@@ -144,6 +150,8 @@ private:
     typedef std::map<endpoint_type, connection::ptr> connections_t;
     connections_t connections_;
     const std::uint32_t buffer_shrink_threshold_;
+    std::atomic<bool> has_cross_vlan_multicast_;
+    ttl_t multicast_ttl_;
     std::uint16_t local_port_;
     const std::chrono::milliseconds send_timeout_;
 

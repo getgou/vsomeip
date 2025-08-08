@@ -19,6 +19,8 @@
 #include <thread>
 #include <unordered_set>
 
+#include <boost/asio/post.hpp>
+
 #include <vsomeip/constants.hpp>
 #include <vsomeip/runtime.hpp>
 #include <vsomeip/internal/logger.hpp>
@@ -27,7 +29,8 @@
 #include "../include/routing_manager_host.hpp"
 #include "../include/routing_manager_client.hpp"
 #include "../../configuration/include/configuration.hpp"
-#include "../../endpoints/include/netlink_connector.hpp"
+#include "../../endpoints/include/server_endpoint.hpp"
+#include "../../endpoints/include/abstract_socket_factory.hpp"
 #include "../../message/include/deserializer.hpp"
 #include "../../message/include/message_impl.hpp"
 #include "../../message/include/serializer.hpp"
@@ -97,9 +100,6 @@ routing_manager_client::routing_manager_client(routing_manager_host *_host,
         request_debounce_timer_running_(false),
         client_side_logging_(_client_side_logging),
         client_side_logging_filter_(_client_side_logging_filter)
-#if defined(__linux__) || defined(ANDROID)
-        , is_local_link_available_(false)
-#endif // defined(__linux__) || defined(ANDROID)
 {
 
     char its_hostname[1024];
@@ -115,60 +115,31 @@ void routing_manager_client::init() {
     routing_manager_base::init(std::make_shared<endpoint_manager_base>(this, io_, configuration_));
     {
         std::scoped_lock its_sender_lock {sender_mutex_};
-        if (configuration_->is_local_routing()) {
-            sender_ = ep_mgr_->create_local(VSOMEIP_ROUTING_CLIENT);
-        } else {
-#if defined(__linux__) || defined(ANDROID)
-            auto its_guest_address = configuration_->get_routing_guest_address();
-            auto its_host_address = configuration_->get_routing_host_address();
-            local_link_connector_ = std::make_shared<netlink_connector>(
-                    io_, its_guest_address, boost::asio::ip::address(),
-                    (its_guest_address != its_host_address));
-            // if the guest is in the same node as the routing manager
-            // it should not require LINK to be UP to communicate
-
-            if (local_link_connector_) {
-                local_link_connector_->register_net_if_changes_handler(
-                    std::bind(&routing_manager_client::on_net_state_change,
-                        this, std::placeholders::_1, std::placeholders::_2,
-                        std::placeholders::_3));
-            } else {
-                VSOMEIP_WARNING << __func__ << ": (" << its_guest_address.to_string() << ":"
-                                << its_host_address.to_string() << ")"
-                                << " local_link_connector not initialized.";
-            }
-#else
+        // NOTE: order matters, `create_local_server` must done first
+        // with TCP, following `create_local` will use whatever port is established there
+        if (!configuration_->is_local_routing()) {
             receiver_ = ep_mgr_->create_local_server(shared_from_this());
-            sender_ = ep_mgr_->create_local(VSOMEIP_ROUTING_CLIENT);
-#endif
+        }
+
+        sender_ = ep_mgr_->create_local(VSOMEIP_ROUTING_CLIENT);
+        if (sender_) {
+            host_->set_sec_client_port(sender_->get_local_port());
+            sender_->start();
         }
     }
 }
 
 void routing_manager_client::start() {
-
-#if defined(__linux__) || defined(ANDROID) || defined(__QNX__)
-    if (configuration_->is_local_routing()) {
-#else
+    is_started_ = true;
     {
-#endif // __linux__ || ANDROID
-        is_started_ = true;
-        {
-            std::scoped_lock its_sender_lock {sender_mutex_};
-            if (!sender_) {
-                // application has been stopped and started again
-                sender_ = ep_mgr_->create_local(VSOMEIP_ROUTING_CLIENT);
-            }
-            if (sender_) {
-                sender_->start();
-            }
+        std::scoped_lock its_sender_lock {sender_mutex_};
+        if (!sender_) {
+            // application has been stopped and started again
+            sender_ = ep_mgr_->create_local(VSOMEIP_ROUTING_CLIENT);
         }
-
-#if defined(__linux__) || defined(ANDROID)
-    } else {
-        if (local_link_connector_)
-            local_link_connector_->start();
-#endif // __linux__ || ANDROID
+        if (sender_) {
+            sender_->start();
+        }
     }
 }
 
@@ -205,11 +176,6 @@ void routing_manager_client::stop() {
         }
     }
     is_started_ = false;
-
-#if defined(__linux__) || defined(ANDROID)
-    if (local_link_connector_)
-        local_link_connector_->stop();
-#endif
 
     {
         std::scoped_lock its_lock(requests_to_debounce_mutex_);
@@ -254,85 +220,6 @@ void routing_manager_client::stop() {
     #endif
     }
 }
-
-#if defined(__linux__) || defined(ANDROID)
-void routing_manager_client::on_net_state_change(bool _is_interface, const std::string& _name,
-                                                 bool _is_available) {
-
-    // No changes in the link availability
-    if (_is_available == is_local_link_available_)
-        return;
-
-    VSOMEIP_INFO << "rmc::" << __func__ << ": ThreadID: " << std::hex << std::this_thread::get_id()
-                 << " - " << std::boolalpha << _is_interface << " " << _name << " "
-                 << std::boolalpha << _is_available;
-
-    if (_is_interface) {
-        if (_is_available) {
-            if (!is_local_link_available_) {
-
-                is_local_link_available_ = true;
-
-                bool is_receiver {false};
-                {
-                    std::scoped_lock its_lock {receiver_mutex_};
-                    if (!receiver_)
-                        receiver_ = ep_mgr_->create_local_server(shared_from_this());
-
-                    if (receiver_) {
-                        receiver_->start();
-                        is_started_ = true;
-
-                        is_receiver = true;
-                    }
-                }
-                if (is_receiver) {
-                    std::scoped_lock its_lock {sender_mutex_};
-                    if (!sender_)
-                        sender_ = ep_mgr_->create_local(VSOMEIP_ROUTING_CLIENT);
-
-                    if (sender_) {
-                        host_->set_sec_client_port(sender_->get_local_port());
-                        sender_->start();
-                    }
-                }
-            }
-        } else {
-            if (is_local_link_available_) {
-                is_local_link_available_ = false;
-                is_started_ = false;
-
-                VSOMEIP_DEBUG << "rmc::" << __func__ << ": state_ change "
-                             << static_cast<int>(state_.load()) << " -> "
-                             << static_cast<int>(inner_state_type_e::ST_DEREGISTERED);
-                state_ = inner_state_type_e::ST_DEREGISTERED;
-
-                {
-                    std::unique_lock its_sender_lock(sender_mutex_);
-                    if (sender_) {
-                        on_disconnect(sender_);
-                        host_->set_sec_client_port(VSOMEIP_SEC_PORT_UNSET);
-                        sender_->stop();
-                        sender_.reset();
-                    }
-                }
-                {
-                    std::scoped_lock its_receiver_lock(receiver_mutex_);
-                    if (receiver_) {
-                        receiver_->stop();
-                        receiver_.reset();
-                    }
-                }
-                for (const auto client : ep_mgr_->get_connected_clients()) {
-                    if (client != VSOMEIP_ROUTING_CLIENT) {
-                        remove_local(client, true);
-                    }
-                }
-            }
-        }
-    }
-}
-#endif // __linux__ || ANDROID
 
 std::shared_ptr<configuration> routing_manager_client::get_configuration() const {
     return host_->get_configuration();
@@ -379,9 +266,11 @@ void routing_manager_client::check_keepalive() {
                 keepalive_timer_.async_wait(
                     [this](boost::system::error_code const&) { this->check_keepalive(); });
                 } else {
-                    VSOMEIP_WARNING << "rmc::" << __func__ << ": client " << get_client()
-                    << " didn't receive keepalive confirmation from HOST.";
-                    io_.post([this] { this->handle_client_error(VSOMEIP_ROUTING_CLIENT); });
+                    VSOMEIP_WARNING << "rmc::" << __func__ << ": client 0x" << std::setfill('0')
+                                    << std::setw(4) << std::hex << get_client()
+                                    << " didn't receive keepalive confirmation from HOST.";
+                    boost::asio::post(
+                            io_, [this] { this->handle_client_error(VSOMEIP_ROUTING_CLIENT); });
                 }
             }
     }
@@ -447,7 +336,7 @@ bool routing_manager_client::offer_service(client_t _client,
     return true;
 }
 
-void routing_manager_client::send_offer_service(client_t _client,
+bool routing_manager_client::send_offer_service(client_t _client,
         service_t _service, instance_t _instance,
         major_version_t _major, minor_version_t _minor) {
 
@@ -466,14 +355,18 @@ void routing_manager_client::send_offer_service(client_t _client,
 
     if (its_error == protocol::error_e::ERROR_OK) {
         std::scoped_lock its_sender_lock {sender_mutex_};
-        if (sender_) {
-            sender_->send(&its_buffer[0], uint32_t(its_buffer.size()));
+        if (sender_ && sender_->send(&its_buffer[0], uint32_t(its_buffer.size()))) {
+            return true;
         }
+        VSOMEIP_ERROR << "rmc::" << __func__ << ": failure offerring service " << std::hex
+                     << std::setfill('0') << std::setw(4) << _service << "." << std::setw(4)
+                     << _instance << "." << std::setw(4) << _major;
     } else {
         VSOMEIP_ERROR << __func__ << ": offer_service serialization failed ("
                 << std::dec << static_cast<int>(its_error) << ")";
     }
 
+    return false;
 }
 
 void routing_manager_client::stop_offer_service(client_t _client,
@@ -556,7 +449,8 @@ void routing_manager_client::request_service(client_t _client,
             requests_to_debounce_.insert(request);
             if (!request_debounce_timer_running_) {
                 request_debounce_timer_running_ = true;
-                request_debounce_timer_.expires_from_now(std::chrono::milliseconds(request_debouncing_time));
+                request_debounce_timer_.expires_after(
+                        std::chrono::milliseconds(request_debouncing_time));
                 request_debounce_timer_.async_wait(
                         std::bind(
                                 &routing_manager_client::request_debounce_timeout_cbk,
@@ -956,12 +850,11 @@ bool routing_manager_client::send(client_t _client, const byte_t *_data,
         client_t _bound_client, const vsomeip_sec_client_t *_sec_client,
         uint8_t _status_check, bool _sent_from_remote, bool _force) {
 
-    (void)_client;
     (void)_bound_client;
     (void)_sec_client;
     (void)_sent_from_remote;
-    bool is_sent(false);
-    bool has_remote_subscribers(false);
+    bool is_sent {false};
+    bool has_remote_subscribers {false};
     {
         if (state_ != inner_state_type_e::ST_REGISTERED) {
             return false;
@@ -1022,14 +915,16 @@ bool routing_manager_client::send(client_t _client, const byte_t *_data,
             // notify_one
             its_target = ep_mgr_->find_local(_client);
             if (its_target) {
+                is_sent = send_local(its_target, get_client(), _data, _size, _instance,
+                                     _reliable, protocol::id_e::SEND_ID, _status_check);
 #ifdef USE_DLT
-                trace::header its_header;
-                if (its_header.prepare(nullptr, true, _instance))
-                    tc_->trace(its_header.data_, VSOMEIP_TRACE_HEADER_SIZE,
-                            _data, _size);
+                if (is_sent) {
+                    trace::header its_header;
+                    if (its_header.prepare(nullptr, true, _instance))
+                        tc_->trace(its_header.data_, VSOMEIP_TRACE_HEADER_SIZE, _data, _size);
+                }
 #endif
-                return send_local(its_target, get_client(), _data, _size,
-                        _instance, _reliable, protocol::id_e::SEND_ID, _status_check);
+                return is_sent;
             }
         }
         // If no direct endpoint could be found
@@ -1062,18 +957,19 @@ bool routing_manager_client::send(client_t _client, const byte_t *_data,
                 send = has_remote_subscribers;
             }
         }
-#ifdef USE_DLT
-        else if (!message_to_stub) {
-            trace::header its_header;
-            if (its_header.prepare(nullptr, true, _instance))
-                tc_->trace(its_header.data_, VSOMEIP_TRACE_HEADER_SIZE,
-                        _data, _size);
-        }
-#endif
         if (send) {
-            is_sent = send_local(its_target,
-                    (its_command == protocol::id_e::NOTIFY_ONE_ID ? _client : get_client()),
-                    _data, _size, _instance, _reliable, its_command, _status_check);
+            auto its_client {its_command == protocol::id_e::NOTIFY_ONE_ID ? _client
+                                                                          : get_client()};
+            is_sent = send_local(its_target, its_client, _data, _size, _instance, _reliable,
+                                 its_command, _status_check);
+#ifdef USE_DLT
+            if (is_sent && !utility::is_notification(VSOMEIP_MESSAGE_TYPE_POS) &&
+                !message_to_stub) {
+                trace::header its_header;
+                if (its_header.prepare(nullptr, true, _instance))
+                    tc_->trace(its_header.data_, VSOMEIP_TRACE_HEADER_SIZE, _data, _size);
+            }
+#endif
         }
     }
     return is_sent;
@@ -1275,30 +1171,31 @@ void routing_manager_client::on_message(
                                 return;
                             }
 
-                            bool is_access_member_ok = (VSOMEIP_SEC_OK ==
-                                configuration_->get_security()->is_client_allowed_to_access_member(
-                                get_sec_client(), its_message->get_service(), its_message->get_instance(),
-                                its_message->get_method()));
-
                             bool is_intern_resp_allowed = (!configuration_->is_security_external()
                                     && is_response_allowed(_bound_client, its_message->get_service(),
                                     its_message->get_instance(),
                                     its_message->get_method()));
 
                             if (is_intern_resp_allowed || is_offer_access_ok) {
-                                if (!is_access_member_ok) {
-                                    VSOMEIP_WARNING << "vSomeIP Security: Client 0x"
-                                                    << std::hex << std::setfill('0') << std::setw(4) << get_client()
-                                                    << " : routing_manager_client::on_message: isn't allowed to receive a "
-                                                    << (utility::is_notification(its_message->get_message_type()) ? "notification" : "response")
-                                                    << " from service/instance/method "
-                                                    << its_message->get_service() << "/" << its_message->get_instance()
-                                                    << "/" << its_message->get_method()
-                                                    << " respectively from client 0x" << _bound_client
-                                                    << " ~> Skip message!";
-                                    return;
-                                }
-                                if (utility::is_notification(its_message->get_message_type())){
+                                const bool is_notification = utility::is_notification(its_message->get_message_type());
+
+                                if(is_notification){
+                                    const bool is_access_member_ok = (VSOMEIP_SEC_OK ==
+                                        configuration_->get_security()->is_client_allowed_to_access_member(
+                                        get_sec_client(), its_message->get_service(), its_message->get_instance(),
+                                        its_message->get_method()));
+
+                                    if (!is_access_member_ok) {
+                                        VSOMEIP_WARNING << "vSomeIP Security: Client 0x"
+                                                        << std::hex << std::setfill('0') << std::setw(4) << get_client()
+                                                        << " : routing_manager_client::on_message: isn't allowed to receive a "
+                                                        << " notification from service/instance/method "
+                                                        << its_message->get_service() << "/" << its_message->get_instance()
+                                                        << "/" << its_message->get_method()
+                                                        << " respectively from client 0x" << _bound_client
+                                                        << " ~> Skip message!";
+                                        return;
+                                    }
                                     cache_event_payload(its_message);
                                 }
                             } else {
@@ -1348,7 +1245,8 @@ void routing_manager_client::on_message(
                             cache_event_payload(its_message);
                         }
                     }
-    #ifdef USE_DLT
+                    host_->on_message(std::move(its_message));
+#ifdef USE_DLT
                     if (client_side_logging_
                         && (client_side_logging_filter_.empty()
                             || (1 == client_side_logging_filter_.count(std::make_tuple(its_message->get_service(), ANY_INSTANCE)))
@@ -1365,9 +1263,7 @@ void routing_manager_client::on_message(
                                     &_data[vsomeip_v3::protocol::SEND_COMMAND_HEADER_SIZE], its_message_size);
                         }
                     }
-    #endif
-
-                    host_->on_message(std::move(its_message));
+#endif
                 } else
                     VSOMEIP_ERROR << "Routing proxy: on_message: "
                         << "SomeIP-Header deserialization failed!";
@@ -1990,9 +1886,6 @@ void routing_manager_client::on_routing_info(
                 }
 
                 if (its_client == get_client()) {
-                    VSOMEIP_INFO << "Application/Client "
-                                 << std::hex << std::setfill('0') << std::setw(4) << get_client()
-                                 << " (" << host_->get_name() << ") is registered.";
 #if defined(__linux__) || defined(ANDROID) || defined(__QNX__)
                     if (!its_policy_manager->check_credentials(get_client(), get_sec_client())) {
                         VSOMEIP_ERROR << "vSomeIP Security: Client 0x" << std::hex << std::setfill('0') << std::setw(4) << get_client()
@@ -2003,34 +1896,36 @@ void routing_manager_client::on_routing_info(
                         return;
                     }
 #endif
-                    {
-                        std::scoped_lock its_registration_lock {registration_state_mutex_};
-                        if (state_ == inner_state_type_e::ST_REGISTERING) {
+                    std::unique_lock its_registration_lock(registration_state_mutex_);
+                    if (state_ == inner_state_type_e::ST_REGISTERING) {
+                        if (send_registered_ack() && send_pending_commands()) {
+                            VSOMEIP_INFO << "Application/Client "
+                                         << std::hex << std::setfill('0') << std::setw(4) << get_client()
+                                         << " (" << host_->get_name() << ") is registered.";
+
+                            state_ = inner_state_type_e::ST_REGISTERED;
                             {
                                 std::scoped_lock its_register_application_lock {register_application_timer_mutex_};
-                                boost::system::error_code ec;
-                                register_application_timer_.cancel(ec);
+                                register_application_timer_.cancel();
                             }
 
-                            VSOMEIP_DEBUG << "rmc::" << __func__ << ": state_ change "
-                                            << static_cast<int>(state_.load()) << " -> "
-                                            << static_cast<int>(inner_state_type_e::ST_REGISTERED);
-                            state_ = inner_state_type_e::ST_REGISTERED;
-                            send_registered_ack();
-                            send_pending_commands();
-
                             start_keepalive();
+                            {
+                                // Notify stop() call about clean deregistration
+                                std::scoped_lock its_lock(state_condition_mutex_);
+                                state_condition_.notify_one();
+                            }
 
-                            // Notify stop() call about clean deregistration
-                            std::scoped_lock its_lock(state_condition_mutex_);
-                            state_condition_.notify_one();
-
+                            its_registration_lock.unlock();
+                            // inform host about its own registration state changes
+                            host_->on_state(static_cast<state_type_e>(inner_state_type_e::ST_REGISTERED));
+                        } else {
+                            VSOMEIP_ERROR << "rmc::" << __func__ << ": failure registering client " << std::hex
+                                          << std::setfill('0') << std::setw(4) << get_client() << " (" << host_->get_name() << ")";
                         }
-                    }
-
-                    // inform host about its own registration state changes
-                    if (state_ == inner_state_type_e::ST_REGISTERED) {
-                        host_->on_state(static_cast<state_type_e>(inner_state_type_e::ST_REGISTERED));
+                    } else if (state_ == inner_state_type_e::ST_REGISTERED) {
+                        VSOMEIP_INFO << "rmc::" << __func__ << ": application/client " << std::hex << std::setfill('0')
+                                     << std::setw(4) << get_client() << " (" << host_->get_name() << ") is already registered.";
                     }
                 }
                 break;
@@ -2038,10 +1933,7 @@ void routing_manager_client::on_routing_info(
 
             case protocol::routing_info_entry_type_e::RIE_DELETE_CLIENT:
             {
-                {
-                    std::scoped_lock its_lock(known_clients_mutex_);
-                    known_clients_.erase(its_client);
-                }
+                remove_known_client(its_client);
                 if (its_client == get_client()) {
                     its_policy_manager->remove_client_to_sec_client_mapping(its_client);
                     VSOMEIP_INFO << "Application/Client " << std::hex << std::setfill('0') << std::setw(4) << get_client()
@@ -2317,9 +2209,8 @@ void routing_manager_client::assign_client() {
 
             {
                 std::scoped_lock its_register_application_lock {register_application_timer_mutex_};
-                boost::system::error_code ec;
-                register_application_timer_.cancel(ec);
-                register_application_timer_.expires_from_now(std::chrono::milliseconds(3000));
+                register_application_timer_.cancel();
+                register_application_timer_.expires_after(std::chrono::milliseconds(3000));
                 register_application_timer_.async_wait(
                     std::bind(
                             &routing_manager_client::assign_client_timeout_cbk,
@@ -2379,7 +2270,7 @@ void routing_manager_client::register_application() {
                 {
                     std::scoped_lock its_register_application_lock {register_application_timer_mutex_};
                     register_application_timer_.cancel();
-                    register_application_timer_.expires_from_now(std::chrono::milliseconds(3000));
+                    register_application_timer_.expires_after(std::chrono::milliseconds(3000));
                     register_application_timer_.async_wait(std::bind(
                             &routing_manager_client::register_application_timeout_cbk,
                             std::dynamic_pointer_cast<routing_manager_client>(shared_from_this()),
@@ -2454,10 +2345,9 @@ void routing_manager_client::send_pong() const {
             << std::dec << int(its_error) << ")";
 }
 
-void routing_manager_client::send_request_services(const std::set<protocol::service> &_requests) {
-
+bool routing_manager_client::send_request_services(const std::set<protocol::service> &_requests) {
     if (!_requests.size()) {
-        return;
+        return true;
     }
 
     protocol::request_service_command its_command;
@@ -2469,13 +2359,16 @@ void routing_manager_client::send_request_services(const std::set<protocol::serv
     its_command.serialize(its_buffer, its_error);
     if (its_error == protocol::error_e::ERROR_OK) {
         std::scoped_lock its_sender_lock {sender_mutex_};
-        if (sender_) {
-            sender_->send(&its_buffer[0], uint32_t(its_buffer.size()));
+        if (sender_ && sender_->send(&its_buffer[0], uint32_t(its_buffer.size()))) {
+            return true;
         }
+        VSOMEIP_ERROR << "rmc::" << __func__ << ": Failed to send requested services";
     } else {
         VSOMEIP_ERROR << __func__ << ": request service serialization failed ("
                 << std::dec << static_cast<int>(its_error) << ")";
     }
+
+    return false;
 }
 
 void routing_manager_client::send_release_service(client_t _client, service_t _service,
@@ -2499,10 +2392,11 @@ void routing_manager_client::send_release_service(client_t _client, service_t _s
     }
 }
 
-void routing_manager_client::send_pending_event_registrations(client_t _client) {
+bool routing_manager_client::send_pending_event_registrations(client_t _client) {
 
     protocol::register_events_command its_command;
     its_command.set_client(_client);
+    bool sent{true};
 
     std::scoped_lock its_lock(pending_event_registrations_mutex_);
     auto it = pending_event_registrations_.begin();
@@ -2521,14 +2415,23 @@ void routing_manager_client::send_pending_event_registrations(client_t _client) 
 
         if (its_error == protocol::error_e::ERROR_OK) {
             std::scoped_lock its_sender_lock {sender_mutex_};
-            if (sender_) {
-                sender_->send(&its_buffer[0], uint32_t(its_buffer.size()));
+            if (!(sender_ && sender_->send(&its_buffer[0], uint32_t(its_buffer.size())))) {
+                    VSOMEIP_ERROR << "rmc::" << __func__ << " : failed to send pending registration to host";
+                    sent = false;
             }
-        } else
+        } else {
             VSOMEIP_ERROR << __func__
                 << ": register event command serialization failed ("
                 << std::dec << int(its_error) << ")";
+            sent = false;
+        }
+
+        if (!sent) {
+            break;
+        }
     }
+
+    return sent;
 }
 
 void routing_manager_client::send_register_event(client_t _client,
@@ -2670,19 +2573,21 @@ void routing_manager_client::on_stop_offer_service(service_t _service,
     }
 }
 
-void routing_manager_client::send_pending_commands() {
+bool routing_manager_client::send_pending_commands() {
     {
         std::scoped_lock its_lock(pending_offers_mutex_);
         for (auto &po : pending_offers_) {
-            send_offer_service(get_client(),
-                po.service_, po.instance_,
-                po.major_, po.minor_);
+            if (!send_offer_service(get_client(), po.service_, po.instance_,
+            po.major_, po.minor_)) {
+                return  false;
+            }
         }
     }
 
-    send_pending_event_registrations(get_client());
-    std::scoped_lock its_lock (requests_mutex_);
-    send_request_services(requests_);
+    {
+        std::scoped_lock its_lock (requests_mutex_);
+        return send_pending_event_registrations(get_client()) && send_request_services(requests_);
+    }
 }
 
 void routing_manager_client::init_receiver() {
@@ -2848,7 +2753,7 @@ void routing_manager_client::register_application_timeout_cbk(
     }
 }
 
-void routing_manager_client::send_registered_ack() {
+bool routing_manager_client::send_registered_ack() {
 
     protocol::registered_ack_command its_command;
     its_command.set_client(get_client());
@@ -2860,13 +2765,17 @@ void routing_manager_client::send_registered_ack() {
     if (its_error == protocol::error_e::ERROR_OK) {
 
         std::scoped_lock its_sender_lock {sender_mutex_};
-        if (sender_) {
-            sender_->send(&its_buffer[0], uint32_t(its_buffer.size()));
+        if (sender_ && sender_->send(&its_buffer[0], uint32_t(its_buffer.size()))) {
+            return true;
         }
-    } else
+        VSOMEIP_ERROR << "rmc::" << __func__ << ": failed sending registered ack";
+    } else {
         VSOMEIP_ERROR << __func__
             << ": registered ack command serialization failed ("
             << std::dec << int(its_error) << ")";
+    }
+
+    return false;
 }
 
 bool routing_manager_client::is_client_known(client_t _client) {
@@ -2917,7 +2826,7 @@ void routing_manager_client::request_debounce_timeout_cbk(boost::system::error_c
                            requests_to_debounce_.end());
                 requests_to_debounce_.clear();
             } else {
-                request_debounce_timer_.expires_from_now(std::chrono::milliseconds(
+                request_debounce_timer_.expires_after(std::chrono::milliseconds(
                         configuration_->get_request_debounce_time(host_->get_name())));
                 request_debounce_timer_.async_wait(
                         std::bind(
@@ -2961,6 +2870,12 @@ void routing_manager_client::handle_client_error(client_t _client) {
         }
 
         // Remove the client from the local connections.
+        {
+            std::scoped_lock lock {receiver_mutex_};
+            if (auto endpoint = std::dynamic_pointer_cast<server_endpoint>(receiver_)) {
+                endpoint->disconnect_from(_client);
+            }
+        }
         remove_local(_client, true);
 
         // Request the host these services again.
@@ -3145,8 +3060,7 @@ void routing_manager_client::on_client_assign_ack(const client_t &_client) {
 
             {
                 std::scoped_lock its_register_application_lock {register_application_timer_mutex_};
-                boost::system::error_code ec;
-                register_application_timer_.cancel(ec);
+                register_application_timer_.cancel();
             }
             host_->set_client(_client);
 

@@ -1,0 +1,75 @@
+2025-08-07 09:58:51.474576 service-sample [info] Using configuration file: "../config/vsomeip-local-tcp-service.json".
+2025-08-07 09:58:51.474613 service-sample [info] Parsed vsomeip configuration in 0ms
+2025-08-07 09:58:51.474619 service-sample [info] Configuration module loaded.
+2025-08-07 09:58:51.474621 service-sample [info] Security disabled!
+2025-08-07 09:58:51.474623 service-sample [info] Initializing vsomeip (3.5.6) application "service-sample".
+2025-08-07 09:58:51.474813 service-sample [info] Instantiating routing manager [Host].
+2025-08-07 09:58:51.475259 service-sample [info] create_routing_root: Routing root @ /tmp/vsomeip-0
+2025-08-07 09:58:51.475393 service-sample [info] Service Discovery enabled. Trying to load module.
+2025-08-07 09:58:51.475669 service-sample [info] Service Discovery module loaded.
+2025-08-07 09:58:51.475750 service-sample [info] Application(service-sample, 1277) is initialized (11, 100).
+Static routing OFF
+2025-08-07 09:58:51.475773 service-sample [info] Starting vsomeip application "service-sample" (1277) using 2 threads I/O nice 0 boost event loop period 0
+2025-08-07 09:58:51.475863 service-sample [debug] Thread created. Number of active threads for service-sample : 1
+2025-08-07 09:58:51.475966 service-sample [info] Client [1277] routes unicast:127.0.0.1, netmask:255.255.255.0
+2025-08-07 09:58:51.475952 service-sample [info] main dispatch thread id from application: 1277 (service-sample) is: 7bfd6bbfd640 TID: 56400
+2025-08-07 09:58:51.476101 service-sample [info] shutdown thread id from application: 1277 (service-sample) is: 7bfd6b3fc640 TID: 56401
+2025-08-07 09:58:51.477567 service-sample [info] Watchdog is disabled!
+Application service-sample is registered.
+2025-08-07 09:58:51.482061 service-sample [info] io thread id from application: 1277 (service-sample) is: 7bfd69bf9640 TID: 56404
+2025-08-07 09:58:51.482144 service-sample [info] vSomeIP 3.5.6 | (default)
+2025-08-07 09:58:51.482169 service-sample [warning] Network interface "lo" state changed: up
+2025-08-07 09:58:51.482197 service-sample [info] io thread id from application: 1277 (service-sample) is: 7bfd6d738b80 TID: 56397
+2025-08-07 09:58:51.482335 service-sample [info] rmi::offer_service added service: 1234 to pending_sd_offers_.size = 1
+2025-08-07 09:58:51.482349 service-sample [debug] ON_OFFER_SERVICE(1277): [1234.5678:0.0]
+2025-08-07 09:58:51.482561 service-sample [info] create_local_server: Listening @ /tmp/vsomeip-1277
+2025-08-07 09:58:51.482582 service-sample [info] OFFER(1277): [1234.5678:0.0] (true)
+2025-08-07 09:58:51.482589 service-sample [info] rmi::offer_service added service: 1235 to pending_sd_offers_.size = 2
+2025-08-07 09:58:51.482593 service-sample [debug] ON_OFFER_SERVICE(1277): [1235.5678:0.0]
+2025-08-07 09:58:51.482595 service-sample [info] OFFER(1277): [1235.5678:0.0] (true)
+2025-08-07 09:58:53.292910 service-sample [info] Application/Client 1343 is registering.
+2025-08-07 09:58:53.296545 service-sample [info] emb::find_or_create_local: create_client 1343
+2025-08-07 09:58:53.296585 service-sample [info] Client [1277] is connecting to [1343] at /tmp/vsomeip-1343 endpoint > 0x7bfd60000e50
+2025-08-07 09:58:53.302139 service-sample [info] cei::wait_connecting_cbk: endpoint > 0x7bfd60000e50 socket state > 1
+2025-08-07 09:58:53.307864 service-sample [info] REGISTERED_ACK(1343)
+2025-08-07 09:58:53.327307 service-sample [info] REQUEST(1343): [1234.5678:255.4294967295]
+Received a message with Client/Session [1343/0001]
+Received a message with Client/Session [1343/0002]
+Received a message with Client/Session [1343/0003]
+Received a message with Client/Session [1343/0004]
+Received a message with Client/Session [1343/0005]
+Received a message with Client/Session [1343/0006]
+Received a message with Client/Session [1343/0007]
+Received a message with Client/Session [1343/0008]
+Received a message with Client/Session [1343/0009]
+2025-08-07 09:59:01.482749 service-sample [info] vSomeIP 3.5.6 | (default)
+2025-08-07 09:59:01.537630 service-sample [info] STOP OFFER(1277): [1234.5678:0.0] (true)
+2025-08-07 09:59:01.537663 service-sample [info] rmi::stop_offer_service removed service: 1234 to pending_sd_offers_.size = 1
+2025-08-07 09:59:01.537728 service-sample [info] STOP OFFER(1277): [1235.5678:0.0] (true)
+2025-08-07 09:59:01.537734 service-sample [info] rmi::stop_offer_service removed service: 1235 to pending_sd_offers_.size = 0
+2025-08-07 09:59:11.485810 service-sample [info] vSomeIP 3.5.6 | (default)
+2025-08-07 09:59:11.625323 service-sample [info] rmi::offer_service added service: 1234 to pending_sd_offers_.size = 1
+2025-08-07 09:59:11.625548 service-sample [debug] ON_OFFER_SERVICE(1277): [1234.5678:0.0]
+2025-08-07 09:59:11.625570 service-sample [info] OFFER(1277): [1234.5678:0.0] (true)
+2025-08-07 09:59:11.625575 service-sample [info] rmi::offer_service added service: 1235 to pending_sd_offers_.size = 2
+2025-08-07 09:59:11.625577 service-sample [debug] ON_OFFER_SERVICE(1277): [1235.5678:0.0]
+2025-08-07 09:59:11.625579 service-sample [info] OFFER(1277): [1235.5678:0.0] (true)
+Received a message with Client/Session [1343/000a]
+Received a message with Client/Session [1343/000b]
+Received a message with Client/Session [1343/000c]
+Received a message with Client/Session [1343/000d]
+Received a message with Client/Session [1343/000e]
+Received a message with Client/Session [1343/000f]
+Received a message with Client/Session [1343/0010]
+Received a message with Client/Session [1343/0011]
+Received a message with Client/Session [1343/0012]
+^C2025-08-07 09:59:20.584985 service-sample [info] STOP OFFER(1277): [1234.5678:0.0] (true)
+2025-08-07 09:59:20.585007 service-sample [info] rmi::stop_offer_service removed service: 1234 to pending_sd_offers_.size = 1
+2025-08-07 09:59:20.585037 service-sample [info] STOP OFFER(1277): [1235.5678:0.0] (true)
+2025-08-07 09:59:20.585039 service-sample [info] rmi::stop_offer_service removed service: 1235 to pending_sd_offers_.size = 0
+2025-08-07 09:59:20.643650 service-sample [info] Stopping vsomeip application "service-sample" (1277).
+2025-08-07 09:59:20.644082 service-sample [debug] Thread destroyed. Number of active threads for service-sample : 0
+2025-08-07 09:59:20.645358 service-sample [info] emb::remove_local: client 1343
+2025-08-07 09:59:20.645439 service-sample [info] cei::shutdown_and_close_socket_unlocked: not recreating socket  endpoint > 0x7bfd60000e50 socket state > 0
+2025-08-07 09:59:20.645479 service-sample [info] Client [1277] is closing connection to [1343] endpoint > 0x7bfd60000e50
+2025-08-07 09:59:20.645438 service-sample [info] local_uds_client_endpoint_impl::receive_cbk Error: Operation canceled
