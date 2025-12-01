@@ -13,7 +13,11 @@
         {
             "name" : "CLGW180",
             "id" : "0x1380"
-        }
+        },
+        {
+            "name" : "RoutingManagerClient",
+            "id" : "0x1381"
+        } 
  
     ],
     "clients" :
@@ -25,7 +29,7 @@
         }
     ],
     "network": "VLAN180",
-    "routing": "CLGW180",
+    "routing": "RoutingManagerClient",
     "service-discovery" :
     {
         "enable" : "true",

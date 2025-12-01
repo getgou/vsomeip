@@ -1,0 +1,284 @@
+gett@Ubuntu-22:~/repo/vsomeip/vsomeip_goitom/Apps/multi-vlan-apps/script$ sudo ./start_client.sh 
+[sudo] password for gett: 
+./start_client.sh: 6: [[: not found
+Using config for VLAN170: /home/gett/repo/vsomeip/vsomeip_goitom/Apps/multi-vlan-apps/config/vsomeip-udp-client-vlan170.json
+Using config for VLAN180: /home/gett/repo/vsomeip/vsomeip_goitom/Apps/multi-vlan-apps/config/vsomeip-udp-client-vlan180.json
+Binary directory: /home/gett/repo/vsomeip/vsomeip_goitom/Apps/multi-vlan-apps/build
+
+Starting RoutingManagerClient in ns170...
+ → RoutingManagerClient PID (ns170) = 6362
+Starting ClientApp(170) in ns170...
+ → PID inside ns170: 6370
+ → RoutingManagerClient PID (ns180) = 6377
+Starting ClientApp(180) in ns180...
+ → PID inside ns180: 6385
+
+All processes running!
+ns170 router PID:   6362
+ns170 PID = 6370
+ns180 router PID:   6377
+ns180 PID = 6385
+
+===== VSOMEIP LIVE LOGS (Ctrl+C to exit log view) =====
+==> /tmp/ns170_routing.log <==
+2025-12-01 14:28:14.079900 [info] Using configuration file: "/home/gett/repo/vsomeip/vsomeip_goitom/Apps/multi-vlan-apps/config/vsomeip-udp-client-router-vlan170.json".
+2025-12-01 14:28:14.080083 [info] Parsed vsomeip configuration in 0ms
+2025-12-01 14:28:14.080095 [info] Configuration loaded with Multiple Routing Managers ENABLED.
+2025-12-01 14:28:14.080099 [info] Security disabled!
+2025-12-01 14:28:14.080101 [info] Initializing vsomeip (3.5.11) application "RoutingManagerClient".
+2025-12-01 14:28:14.080130 [info] Instantiating routing manager [Host].
+2025-12-01 14:28:14.080223 [info] create_routing_root: Routing root @ /tmp/VLAN170-0
+2025-12-01 14:28:14.080303 [info] Service Discovery enabled. Trying to load module.
+2025-12-01 14:28:14.080436 [info] Service Discovery module loaded.
+2025-12-01 14:28:14.080691 [info] sdi::init stop offer watchdog enabled.
+2025-12-01 14:28:14.080699 [info] Application(RoutingManagerClient, 1371) is initialized (11, 100).
+2025-12-01 14:28:14.080707 [info] Starting vsomeip application "RoutingManagerClient" (1371) using 2 threads I/O nice 0 boost event loop period 0
+2025-12-01 14:28:14.080759 [debug] Thread created. Number of active threads for RoutingManagerClient : 1
+2025-12-01 14:28:14.080793 [info] Client [1371] routes unicast:192.168.170.1, netmask:255.255.255.0
+2025-12-01 14:28:14.080812 [info] Started thread 1371_m_dispatch, application 'RoutingManagerClient', id 7a829c7fe640, tid 6365
+2025-12-01 14:28:14.080821 [info] netlink: from 0 to 1, if=0, mc=0, count=0
+2025-12-01 14:28:14.080849 [info] Started thread 1371_shutdown, application 'RoutingManagerClient', id 7a829bffd640, tid 6366
+2025-12-01 14:28:14.080906 [info] Watchdog is disabled!
+routing-manager state: 0
+2025-12-01 14:28:14.081152 [info] Started thread 1371_io00, application 'RoutingManagerClient', id 7a829db5f000, tid 6362
+2025-12-01 14:28:14.081167 [info] netlink: from 1 to 2, if=3, mc=0, count=0
+2025-12-01 14:28:14.081203 [info] vSomeIP 3.5.11 | (default)
+2025-12-01 14:28:14.081216 [info] Started thread 1371_io01, application 'RoutingManagerClient', id 7a829affb640, tid 6368
+2025-12-01 14:28:14.081231 [info] netlink: from 2 to 3, if=3, mc=0, count=1
+2025-12-01 14:28:14.081239 [info] rmi::log_network_state: UDP connections
+2025-12-01 14:28:14.081242 [info] idx, local_addr, remote_addr, state, tx_queue, rx_queue, timer_active, tm_when, retrnsmt, uid, unanswered
+2025-12-01 14:28:14.081258 [warning] Network interface "enp0s3.170" state changed: up
+2025-12-01 14:28:14.081272 [info] netlink: from 3 to 4, if=3, mc=1, count=1
+2025-12-01 14:28:14.081276 [warning] Route "enp0s3.170" state changed: up
+2025-12-01 14:28:14.081288 [info] usei#1::udp_server_endpoint_impl
+2025-12-01 14:28:14.081290 [info] rmi::log_network_state: TCP connections
+2025-12-01 14:28:14.081290 [info] usei#1::init: 192.168.170.1:30490, lifecycle_idx=0
+2025-12-01 14:28:14.081343 [info] usei#1::192.168.170.1:30490::init: lifecycle_idx=0, Success
+2025-12-01 14:28:14.081351 [info] usei#1::192.168.170.1:30490::start: lifecycle_idx=0
+2025-12-01 14:28:14.081354 [info] usei#1::192.168.170.1:30490::start_unlocked: start unicast data handler, lifecycle_idx=1
+2025-12-01 14:28:14.081360 [info] usei#1::192.168.170.1:30490::start_unlocked: join 0 groups
+2025-12-01 14:28:14.081292 [info] idx, local_addr, remote_addr, state, tx_queue, rx_queue, timer_active, tm_when, retrnsmt, uid, unanswered
+2025-12-01 14:28:14.081362 [info] usei#1::192.168.170.1:30490::start: done, lifecycle_idx=1
+2025-12-01 14:28:14.081390 [info] usei#1::192.168.170.1:30490::join: 224.244.224.245
+2025-12-01 14:28:14.081408 [info] SOME/IP routing ready.
+2025-12-01 14:28:14.081448 [info] usei#1::192.168.170.1:30490::set_multicast_option: join 224.244.224.245, lifecycle_idx=1, stopped=0
+2025-12-01 14:28:14.081462 [info] usei#1::192.168.170.1:30490::set_multicast_option: start multicast data handler, lifecycle_idx=1
+2025-12-01 14:28:14.081817 [info] usei#1::192.168.170.1:30490::set_multicast_option: join successful
+2025-12-01 14:28:15.105286 [info] lusei::accept_cbk: server @ /tmp/VLAN170-0 accepted connection 0x6182f8bf6cf0 from client [1370], endpoint > 0x6182f8bfada0
+2025-12-01 14:28:15.106224 [info] Application/Client 1370 is registering.
+2025-12-01 14:28:15.106343 [info] emb::find_or_create_local: self 1371, client 1370
+2025-12-01 14:28:15.106499 [info] Client [1371] is connecting to [1370] at /tmp/VLAN170-1370 endpoint > 0x7a8288000ed0
+2025-12-01 14:28:15.106662 [info] cei::wait_connecting_cbk: remote > /tmp/VLAN170-1370, endpoint > 0x7a8288000ed0 socket state > CONNECTING
+2025-12-01 14:28:15.106994 [info] REGISTERED_ACK(1370)
+2025-12-01 14:28:15.122871 [info] REQUEST(1370): [1234.5678:255.4294967295]
+2025-12-01 14:28:15.122971 [info] endpoint_manager_impl::create_remote_client: 192.168.170.2:30509 reliable: 0 using local port: 0
+2025-12-01 14:28:15.123003 [info] udp_client_endpoint_impl::connect: SO_RCVBUFFORCE successful!
+2025-12-01 14:28:15.123006 [info] udp_client_endpoint_impl::connect: SO_RCVBUF is: 1703936 (1703936) local port:0 remote:192.168.170.2:30509
+2025-12-01 14:28:15.127912 [warning] SD messages lost from 192.168.170.2 to 224.244.224.245 - session_id[6:5761]
+2025-12-01 14:28:15.127941 [debug] ON_OFFER_SERVICE(0000): [1234.5678:0.0]
+2025-12-01 14:28:16.526720 [info] sdi::is_reboot Reboot detected, rbt flag: 1 Sender: 192.168.170.2 is multicast: 1 old reboot flag: 1 current session: 6 old session: 5763
+2025-12-01 14:28:16.526765 [info] Reboot detected: IP=192.168.170.2
+2025-12-01 14:28:16.526779 [info] expire_services for address: 192.168.170.2 : delete service/instance 1234.5678 port [0,0] reliability=false
+2025-12-01 14:28:16.526832 [info] cei::shutdown_and_close_socket_unlocked: not recreating socket, remote: 192.168.170.2:30509, endpoint > 0x7a8290003560 socket state > CLOSED
+2025-12-01 14:28:16.526857 [info] endpoint_manager_impl::create_remote_client: 192.168.170.2:30509 reliable: 0 using local port: 0
+2025-12-01 14:28:16.526877 [info] udp_client_endpoint_impl::connect: SO_RCVBUFFORCE successful!
+2025-12-01 14:28:16.526880 [info] udp_client_endpoint_impl::connect: SO_RCVBUF is: 1703936 (1703936) local port:0 remote:192.168.170.2:30509
+2025-12-01 14:28:16.526896 [debug] ON_OFFER_SERVICE(0000): [1234.5678:0.0]
+2025-12-01 14:28:17.269089 [warning] SD messages lost from 192.168.170.2 to 224.244.224.245 - session_id[7:5763]
+2025-12-01 14:28:18.304771 [info] cei::shutdown_and_close_socket_unlocked: not recreating socket, remote: 192.168.170.2:30509, endpoint > 0x6182f8c06600 socket state > CLOSED
+2025-12-01 14:28:18.529163 [info] sdi::is_reboot Reboot detected, rbt flag: 1 Sender: 192.168.170.2 is multicast: 1 old reboot flag: 1 current session: 7 old session: 5765
+2025-12-01 14:28:18.529268 [info] Reboot detected: IP=192.168.170.2
+2025-12-01 14:28:18.529312 [info] endpoint_manager_impl::create_remote_client: 192.168.170.2:30509 reliable: 0 using local port: 0
+2025-12-01 14:28:18.529347 [info] udp_client_endpoint_impl::connect: SO_RCVBUFFORCE successful!
+2025-12-01 14:28:18.529352 [info] udp_client_endpoint_impl::connect: SO_RCVBUF is: 1703936 (1703936) local port:0 remote:192.168.170.2:30509
+2025-12-01 14:28:18.529372 [debug] ON_OFFER_SERVICE(0000): [1234.5678:0.0]
+
+==> /tmp/ns170.log <==
+2025-12-01 14:28:15.103713 [info] Using configuration file: "/home/gett/repo/vsomeip/vsomeip_goitom/Apps/multi-vlan-apps/config/vsomeip-udp-client-vlan170.json".
+2025-12-01 14:28:15.104019 [info] Parsed vsomeip configuration in 7ms
+2025-12-01 14:28:15.104030 [info] Configuration loaded with Multiple Routing Managers ENABLED.
+2025-12-01 14:28:15.104033 [info] Security disabled!
+2025-12-01 14:28:15.104035 [info] Initializing vsomeip (3.5.11) application "CLGW170".
+2025-12-01 14:28:15.104042 [info] Instantiating routing manager [Proxy].
+2025-12-01 14:28:15.104059 [info] Application(CLGW170, 1370) is initialized (11, 100).
+Client settings [protocol=UDP:quiet=false:cycle=1000]
+2025-12-01 14:28:15.104089 [info] Starting vsomeip application "CLGW170" (1370) using 2 threads I/O nice 0 boost event loop period 0
+2025-12-01 14:28:15.104152 [debug] Thread created. Number of active threads for CLGW170 : 1
+2025-12-01 14:28:15.104186 [info] Client [1370] is connecting to [0] at /tmp/VLAN170-0 endpoint > 0x5bab62ff1520
+2025-12-01 14:28:15.104472 [info] Started thread 1370_io00, application 'CLGW170', id 787929fe7000, tid 6370
+2025-12-01 14:28:15.104488 [info] cei::wait_connecting_cbk: remote > /tmp/VLAN170-0, endpoint > 0x5bab62ff1520 socket state > CONNECTING
+2025-12-01 14:28:15.104494 [info] assign_client: (1370:CLGW170)
+2025-12-01 14:28:15.104496 [debug] rmc::assign_client: state_ change ST_DEREGISTERED -> ST_ASSIGNING
+2025-12-01 14:28:15.104543 [info] Started thread 1370_m_dispatch, application 'CLGW170', id 787928bfe640, tid 6373
+Service [1234.5678] is NOT available.
+2025-12-01 14:28:15.104575 [info] Started thread 1370_shutdown, application 'CLGW170', id 7879283fd640, tid 6374
+2025-12-01 14:28:15.104590 [info] Started thread 1370_io01, application 'CLGW170', id 787927bfc640, tid 6375
+2025-12-01 14:28:15.105749 [debug] rmc::on_client_assign_ack: state_ change ST_ASSIGNING -> ST_ASSIGNED
+2025-12-01 14:28:15.106062 [info] create_local_server: Listening @ /tmp/VLAN170-1370
+2025-12-01 14:28:15.106076 [info] Client 1370 (CLGW170) successfully connected to routing  ~> registering..
+2025-12-01 14:28:15.106080 [info] Client 1370 Registering to routing manager @ VLAN170-0
+2025-12-01 14:28:15.106083 [debug] rmc::register_application: state_ change ST_ASSIGNED -> ST_REGISTERING
+2025-12-01 14:28:15.106735 [info] lusei::accept_cbk: server @ /tmp/VLAN170-1370 accepted connection 0x5bab62ff1ad0 from client [1371], endpoint > 0x5bab62ff5080
+2025-12-01 14:28:15.106843 [info] Application/Client 1370 (CLGW170) is registered.
+Service [1234.5678] is available.
+2025-12-01 14:28:15.128180 [info] ON_AVAILABLE(1370): [1234.5678:0.0]
+Client/Session [1370/0001] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1370/0001]
+Client/Session [1370/0002] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1370/0002]
+2025-12-01 14:28:16.526966 [info] ON_UNAVAILABLE(1370): [1234.5678:0.0]
+Service [1234.5678] is NOT available.
+2025-12-01 14:28:16.527057 [info] ON_AVAILABLE(1370): [1234.5678:0.0]
+Service [1234.5678] is available.
+Client/Session [1370/0003] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1370/0003]
+Client/Session [1370/0004] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1370/0004]
+2025-12-01 14:28:18.304970 [info] ON_UNAVAILABLE(1370): [1234.5678:0.0]
+Service [1234.5678] is NOT available.
+2025-12-01 14:28:18.529685 [info] ON_AVAILABLE(1370): [1234.5678:0.0]
+Service [1234.5678] is available.
+Client/Session [1370/0005] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1370/0005]
+Client/Session [1370/0006] sent a request to Service [1234.5678]
+
+==> /tmp/ns180_routing.log <==
+2025-12-01 14:28:17.110368 [info] Using configuration file: "/home/gett/repo/vsomeip/vsomeip_goitom/Apps/multi-vlan-apps/config/vsomeip-udp-client-router-vlan180.json".
+2025-12-01 14:28:17.110445 [info] Parsed vsomeip configuration in 0ms
+2025-12-01 14:28:17.110451 [info] Configuration loaded with Multiple Routing Managers ENABLED.
+2025-12-01 14:28:17.110455 [info] Security disabled!
+2025-12-01 14:28:17.110456 [info] Initializing vsomeip (3.5.11) application "RoutingManagerClient".
+2025-12-01 14:28:17.110488 [info] Instantiating routing manager [Host].
+2025-12-01 14:28:17.110547 [info] create_routing_root: Routing root @ /tmp/VLAN180-0
+2025-12-01 14:28:17.110748 [info] Service Discovery enabled. Trying to load module.
+2025-12-01 14:28:17.110889 [info] Service Discovery module loaded.
+2025-12-01 14:28:17.111086 [info] sdi::init stop offer watchdog enabled.
+2025-12-01 14:28:17.111119 [info] Application(RoutingManagerClient, 1381) is initialized (11, 100).
+2025-12-01 14:28:17.111129 [info] Starting vsomeip application "RoutingManagerClient" (1381) using 2 threads I/O nice 0 boost event loop period 0
+2025-12-01 14:28:17.111196 [debug] Thread created. Number of active threads for RoutingManagerClient : 1
+2025-12-01 14:28:17.111226 [info] Client [1381] routes unicast:192.168.180.1, netmask:255.255.255.0
+2025-12-01 14:28:17.111252 [info] netlink: from 0 to 1, if=0, mc=0, count=0
+2025-12-01 14:28:17.111311 [info] Watchdog is disabled!
+2025-12-01 14:28:17.111724 [info] Started thread 1381_io00, application 'RoutingManagerClient', id 7676035a7000, tid 6377
+2025-12-01 14:28:17.111743 [info] netlink: from 1 to 2, if=4, mc=0, count=0
+2025-12-01 14:28:17.111780 [info] vSomeIP 3.5.11 | (default)
+2025-12-01 14:28:17.111813 [info] rmi::log_network_state: UDP connections
+2025-12-01 14:28:17.111815 [info] idx, local_addr, remote_addr, state, tx_queue, rx_queue, timer_active, tm_when, retrnsmt, uid, unanswered
+2025-12-01 14:28:17.111925 [info] Started thread 1381_shutdown, application 'RoutingManagerClient', id 7676019fd640, tid 6381
+2025-12-01 14:28:17.111954 [info] rmi::log_network_state: TCP connections
+2025-12-01 14:28:17.111958 [info] idx, local_addr, remote_addr, state, tx_queue, rx_queue, timer_active, tm_when, retrnsmt, uid, unanswered
+2025-12-01 14:28:17.111964 [info] Started thread 1381_m_dispatch, application 'RoutingManagerClient', id 7676021fe640, tid 6380
+routing-manager state: 0
+2025-12-01 14:28:17.112002 [info] netlink: from 2 to 3, if=4, mc=0, count=1
+2025-12-01 14:28:17.112011 [info] Started thread 1381_io01, application 'RoutingManagerClient', id 7676009fb640, tid 6383
+2025-12-01 14:28:17.112025 [warning] Network interface "enp0s3.180" state changed: up
+2025-12-01 14:28:17.112076 [info] netlink: from 3 to 4, if=4, mc=1, count=1
+2025-12-01 14:28:17.112093 [warning] Route "enp0s3.180" state changed: up
+2025-12-01 14:28:17.112100 [info] usei#1::udp_server_endpoint_impl
+2025-12-01 14:28:17.112103 [info] usei#1::init: 192.168.180.1:30491, lifecycle_idx=0
+2025-12-01 14:28:17.112122 [info] usei#1::192.168.180.1:30491::init: lifecycle_idx=0, Success
+2025-12-01 14:28:17.112128 [info] usei#1::192.168.180.1:30491::start: lifecycle_idx=0
+2025-12-01 14:28:17.112130 [info] usei#1::192.168.180.1:30491::start_unlocked: start unicast data handler, lifecycle_idx=1
+2025-12-01 14:28:17.112134 [info] usei#1::192.168.180.1:30491::start_unlocked: join 0 groups
+2025-12-01 14:28:17.112135 [info] usei#1::192.168.180.1:30491::start: done, lifecycle_idx=1
+2025-12-01 14:28:17.112140 [info] usei#1::192.168.180.1:30491::join: 224.244.224.246
+2025-12-01 14:28:17.112161 [info] usei#1::192.168.180.1:30491::set_multicast_option: join 224.244.224.246, lifecycle_idx=1, stopped=0
+2025-12-01 14:28:17.112174 [info] usei#1::192.168.180.1:30491::set_multicast_option: start multicast data handler, lifecycle_idx=1
+2025-12-01 14:28:17.112446 [info] usei#1::192.168.180.1:30491::set_multicast_option: join successful
+2025-12-01 14:28:17.112468 [info] SOME/IP routing ready.
+2025-12-01 14:28:17.965452 [info] sdi::is_reboot Reboot detected, rbt flag: 1 Sender: 192.168.180.2 is multicast: 1 old reboot flag: 1 current session: 5 old session: 5772
+2025-12-01 14:28:17.965535 [info] Reboot detected: IP=192.168.180.2
+2025-12-01 14:28:18.139874 [info] lusei::accept_cbk: server @ /tmp/VLAN180-0 accepted connection 0x5b2ba4592cf0 from client [1380], endpoint > 0x5b2ba4596da0
+2025-12-01 14:28:18.140198 [info] Application/Client 1380 is registering.
+2025-12-01 14:28:18.140731 [info] emb::find_or_create_local: self 1381, client 1380
+2025-12-01 14:28:18.140754 [info] Client [1381] is connecting to [1380] at /tmp/VLAN180-1380 endpoint > 0x7675e8000ed0
+2025-12-01 14:28:18.140826 [info] cei::wait_connecting_cbk: remote > /tmp/VLAN180-1380, endpoint > 0x7675e8000ed0 socket state > CONNECTING
+2025-12-01 14:28:18.141999 [info] REGISTERED_ACK(1380)
+2025-12-01 14:28:18.155762 [info] REQUEST(1380): [1235.5679:255.4294967295]
+2025-12-01 14:28:18.155869 [info] endpoint_manager_impl::create_remote_client: 192.168.180.2:30510 reliable: 0 using local port: 0
+2025-12-01 14:28:18.155901 [info] udp_client_endpoint_impl::connect: SO_RCVBUFFORCE successful!
+2025-12-01 14:28:18.155904 [info] udp_client_endpoint_impl::connect: SO_RCVBUF is: 1703936 (1703936) local port:0 remote:192.168.180.2:30510
+2025-12-01 14:28:18.163221 [debug] ON_OFFER_SERVICE(0000): [1235.5679:0.0]
+2025-12-01 14:28:18.163374 [info] sdi::is_reboot Reboot detected, rbt flag: 1 Sender: 192.168.180.2 is multicast: 0 old reboot flag: 1 current session: 1 old session: 5
+2025-12-01 14:28:18.163391 [info] Reboot detected: IP=192.168.180.2
+2025-12-01 14:28:18.163400 [info] expire_services for address: 192.168.180.2 : delete service/instance 1235.5679 port [0,0] reliability=false
+2025-12-01 14:28:18.163564 [info] cei::shutdown_and_close_socket_unlocked: not recreating socket, remote: 192.168.180.2:30510, endpoint > 0x7675f00025d0 socket state > CLOSED
+2025-12-01 14:28:18.163627 [info] endpoint_manager_impl::create_remote_client: 192.168.180.2:30510 reliable: 0 using local port: 0
+2025-12-01 14:28:18.163735 [info] udp_client_endpoint_impl::connect: SO_RCVBUFFORCE successful!
+2025-12-01 14:28:18.163746 [info] udp_client_endpoint_impl::connect: SO_RCVBUF is: 1703936 (1703936) local port:0 remote:192.168.180.2:30510
+2025-12-01 14:28:18.163789 [debug] ON_OFFER_SERVICE(0000): [1235.5679:0.0]
+2025-12-01 14:28:18.507384 [warning] SD messages lost from 192.168.180.2 to 224.244.224.246 - session_id[6:5772]
+2025-12-01 14:28:18.507678 [info] cei::shutdown_and_close_socket_unlocked: not recreating socket, remote: 192.168.180.2:30510, endpoint > 0x7675f0003450 socket state > CLOSED
+2025-12-01 14:28:19.551854 [info] sdi::is_reboot Reboot detected, rbt flag: 1 Sender: 192.168.180.2 is multicast: 1 old reboot flag: 1 current session: 6 old session: 5773
+2025-12-01 14:28:19.551927 [info] Reboot detected: IP=192.168.180.2
+2025-12-01 14:28:19.552024 [info] endpoint_manager_impl::create_remote_client: 192.168.180.2:30510 reliable: 0 using local port: 0
+2025-12-01 14:28:19.552408 [info] udp_client_endpoint_impl::connect: SO_RCVBUFFORCE successful!
+2025-12-01 14:28:19.552420 [info] udp_client_endpoint_impl::connect: SO_RCVBUF is: 1703936 (1703936) local port:0 remote:192.168.180.2:30510
+2025-12-01 14:28:19.552450 [debug] ON_OFFER_SERVICE(0000): [1235.5679:0.0]
+
+==> /tmp/ns180.log <==
+2025-12-01 14:28:18.138890 [info] Using configuration file: "/home/gett/repo/vsomeip/vsomeip_goitom/Apps/multi-vlan-apps/config/vsomeip-udp-client-vlan180.json".
+2025-12-01 14:28:18.139089 [info] Parsed vsomeip configuration in 7ms
+2025-12-01 14:28:18.139097 [info] Configuration loaded with Multiple Routing Managers ENABLED.
+2025-12-01 14:28:18.139104 [info] Security disabled!
+2025-12-01 14:28:18.139106 [info] Initializing vsomeip (3.5.11) application "CLGW180".
+2025-12-01 14:28:18.139112 [info] Instantiating routing manager [Proxy].
+2025-12-01 14:28:18.139128 [info] Application(CLGW180, 1380) is initialized (11, 100).
+Client settings [protocol=UDP:quiet=false:cycle=1000]
+2025-12-01 14:28:18.139154 [info] Starting vsomeip application "CLGW180" (1380) using 2 threads I/O nice 0 boost event loop period 0
+2025-12-01 14:28:18.139343 [debug] Thread created. Number of active threads for CLGW180 : 1
+2025-12-01 14:28:18.139497 [info] Started thread 1380_m_dispatch, application 'CLGW180', id 7b7ceaffe640, tid 6388
+Service [1235.5679] is NOT available.
+2025-12-01 14:28:18.139748 [info] Client [1380] is connecting to [0] at /tmp/VLAN180-0 endpoint > 0x5f324820e520
+2025-12-01 14:28:18.139813 [info] Started thread 1380_io00, application 'CLGW180', id 7b7cec34d000, tid 6385
+2025-12-01 14:28:18.139821 [info] cei::wait_connecting_cbk: remote > /tmp/VLAN180-0, endpoint > 0x5f324820e520 socket state > CONNECTING
+2025-12-01 14:28:18.139825 [info] assign_client: (1380:CLGW180)
+2025-12-01 14:28:18.139827 [debug] rmc::assign_client: state_ change ST_DEREGISTERED -> ST_ASSIGNING
+2025-12-01 14:28:18.139851 [info] Started thread 1380_shutdown, application 'CLGW180', id 7b7cea7fd640, tid 6389
+2025-12-01 14:28:18.139904 [info] Started thread 1380_io01, application 'CLGW180', id 7b7ce9ffc640, tid 6390
+2025-12-01 14:28:18.140064 [debug] rmc::on_client_assign_ack: state_ change ST_ASSIGNING -> ST_ASSIGNED
+2025-12-01 14:28:18.140148 [info] create_local_server: Listening @ /tmp/VLAN180-1380
+2025-12-01 14:28:18.140158 [info] Client 1380 (CLGW180) successfully connected to routing  ~> registering..
+2025-12-01 14:28:18.140161 [info] Client 1380 Registering to routing manager @ VLAN180-0
+2025-12-01 14:28:18.140164 [debug] rmc::register_application: state_ change ST_ASSIGNED -> ST_REGISTERING
+2025-12-01 14:28:18.141779 [info] lusei::accept_cbk: server @ /tmp/VLAN180-1380 accepted connection 0x5f324820ead0 from client [1381], endpoint > 0x5f3248212080
+2025-12-01 14:28:18.142082 [info] Application/Client 1380 (CLGW180) is registered.
+2025-12-01 14:28:18.163331 [info] ON_AVAILABLE(1380): [1235.5679:0.0]
+Service [1235.5679] is available.
+2025-12-01 14:28:18.163527 [info] ON_UNAVAILABLE(1380): [1235.5679:0.0]
+2025-12-01 14:28:18.163734 [warning] rmb{this=0x5f324820c320}::send{_client=1380 _message=1235.0421.00.00 _force=0}: Service not available. instance=5679 version=000
+Client/Session [1380/0001] sent a request to Service [1235.5679]
+Service [1235.5679] is NOT available.
+Service [1235.5679] is available.
+2025-12-01 14:28:18.163892 [info] ON_AVAILABLE(1380): [1235.5679:0.0]
+2025-12-01 14:28:18.508054 [info] ON_UNAVAILABLE(1380): [1235.5679:0.0]
+Service [1235.5679] is NOT available.
+2025-12-01 14:28:19.552617 [info] ON_AVAILABLE(1380): [1235.5679:0.0]
+Service [1235.5679] is available.
+
+==> /tmp/ns170.log <==
+Received a response from Service [1234.5678] to Client/Session [1370/0006]
+
+==> /tmp/ns180.log <==
+Client/Session [1380/0002] sent a request to Service [1235.5679]
+Received a response from Service [1235.5679] to Client/Session [1380/0002]
+
+==> /tmp/ns170.log <==
+Client/Session [1370/0007] sent a request to Service [1234.5678]
+Received a response from Service [1234.5678] to Client/Session [1370/0007]
+
+==> /tmp/ns180.log <==
+Client/Session [1380/0003] sent a request to Service [1235.5679]
+Received a response from Service [1235.5679] to Client/Session [1380/0003]
+
+==> /tmp/ns170_routing.log <==
+2025-12-01 14:28:21.542364 [info] cei::shutdown_and_close_socket_unlocked: not recreating socket, remote: 192.168.170.2:30509, endpoint > 0x6182f8c06600 socket state > CLOSED
+
+==> /tmp/ns170.log <==
+2025-12-01 14:28:21.542791 [info] ON_UNAVAILABLE(1370): [1234.5678:0.0]
+Service [1234.5678] is NOT available.
+
+==> /tmp/ns180.log <==
+Client/Session [1380/0004] sent a request to Service [1235.5679]
+Received a response from Service [1235.5679] to Client/Session [1380/0004]
+^C

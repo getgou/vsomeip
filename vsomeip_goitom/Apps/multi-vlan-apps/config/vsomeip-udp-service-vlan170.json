@@ -1,0 +1,30 @@
+{
+    "logging" :
+    {
+        "level" : "trace",
+        "console" : "true",
+        "file" : { "enable" : "false", "path" : "/tmp/vsomeip.log" },
+        "dlt" : "false"
+    },
+    "applications" :
+    [
+        {
+            "name" : "SRVGW170",
+            "id" : "0x1270"
+        },
+        {
+            "name" : "RoutingManagerService",
+            "id" : "0x1271"
+        }
+    ],
+    "services" :
+    [
+        {
+            "service" : "0x1234",
+            "instance" : "0x5678",
+            "unreliable" : "30509"
+        }
+    ],
+    "network": "VLAN170",
+    "routing": "RoutingManagerService"
+}

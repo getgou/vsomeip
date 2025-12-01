@@ -19,7 +19,7 @@
 class service_sample {
 public:
     service_sample(bool _use_static_routing) :
-        app_(vsomeip::runtime::get()->create_application()), is_registered_(false), use_static_routing_(_use_static_routing),
+        app_(vsomeip::runtime::get()->create_application("SRVGW180")), is_registered_(false), use_static_routing_(_use_static_routing),
         blocked_(false), running_(true), offer_thread_(std::bind(&service_sample::run, this)) { }
 
     bool init() {
@@ -30,7 +30,7 @@ public:
             return false;
         }
         app_->register_state_handler(std::bind(&service_sample::on_state, this, std::placeholders::_1));
-        app_->register_message_handler(SAMPLE_SERVICE_ID, SAMPLE_INSTANCE_ID, SAMPLE_METHOD_ID,
+        app_->register_message_handler(SAMPLE_SERVICE_ID + 1, SAMPLE_INSTANCE_ID + 1, SAMPLE_METHOD_ID,
                                        std::bind(&service_sample::on_message, this, std::placeholders::_1));
 
         std::cout << "Static routing " << (use_static_routing_ ? "ON" : "OFF") << std::endl;
@@ -56,13 +56,13 @@ public:
     }
 
     void offer() {
-        app_->offer_service(SAMPLE_SERVICE_ID, SAMPLE_INSTANCE_ID);
-        app_->offer_service(SAMPLE_SERVICE_ID + 1, SAMPLE_INSTANCE_ID);
+        //app_->offer_service(SAMPLE_SERVICE_ID, SAMPLE_INSTANCE_ID);
+        app_->offer_service(SAMPLE_SERVICE_ID + 1, SAMPLE_INSTANCE_ID + 1);
     }
 
     void stop_offer() {
-        app_->stop_offer_service(SAMPLE_SERVICE_ID, SAMPLE_INSTANCE_ID);
-        app_->stop_offer_service(SAMPLE_SERVICE_ID + 1, SAMPLE_INSTANCE_ID);
+        //app_->stop_offer_service(SAMPLE_SERVICE_ID, SAMPLE_INSTANCE_ID);
+        app_->stop_offer_service(SAMPLE_SERVICE_ID + 1, SAMPLE_INSTANCE_ID + 1);
     }
 
     void on_state(vsomeip::state_type_e _state) {

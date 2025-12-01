@@ -1,0 +1,30 @@
+{
+    "logging" :
+    {
+        "level" : "trace",
+        "console" : "true",
+        "file" : { "enable" : "true", "path" : "/var/log/vsomeip.log" },
+        "dlt" : "true"
+    },
+    "applications" :
+    [
+        {
+            "name" : "CLGW170",
+            "id" : "0x1370"
+        },
+        {
+            "name" : "RoutingManagerClient",
+            "id" : "0x1371"
+        } 
+    ],
+    "clients" :
+    [
+        {
+            "service" : "0x1234",
+            "instance" : "0x5678",
+            "unreliable" : "30509"
+        }
+    ],
+    "network": "VLAN170",
+    "routing": "RoutingManagerClient"
+}

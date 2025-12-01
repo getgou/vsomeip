@@ -24,12 +24,6 @@ target_link_libraries(response-sample-180 vsomeip3 ${Boost_LIBRARIES})
 add_executable(request-sample-180 src/request-sample-180.cpp)
 target_link_libraries(request-sample-180 vsomeip3 ${Boost_LIBRARIES})
 
-add_executable(proxy src/proxy.cpp)
-target_link_libraries(proxy vsomeip3 ${Boost_LIBRARIES})
-
-add_executable(service src/service.cpp)
-target_link_libraries(service vsomeip3 ${Boost_LIBRARIES})
-
 add_executable(RoutingManagerClient src/RoutingManagerClient.cpp)
 target_link_libraries(RoutingManagerClient vsomeip3 ${Boost_LIBRARIES})
 
