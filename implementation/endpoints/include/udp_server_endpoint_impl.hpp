@@ -124,6 +124,9 @@ private:
     boost::asio::ip::address netmask_;
     uint16_t prefix_{0};
 
+    std::atomic<bool> has_cross_vlan_multicast_;
+    ttl_t multicast_ttl_;
+
     std::shared_ptr<tp::tp_reassembler> tp_reassembler_;
     boost::asio::steady_timer tp_cleanup_timer_;
 
